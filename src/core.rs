@@ -9,8 +9,13 @@ use std::{
 
 use anyhow::Result;
 use path_absolutize::Absolutize;
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(transparent)]
 pub struct Path(pub(crate) PathBuf);
 
 impl Path {
