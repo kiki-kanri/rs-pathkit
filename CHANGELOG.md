@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.9.3
+
+[compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v0.9.2...v0.9.3)
+
+### 🚀 Enhancements
+
+- Add `Deserialize` and `Serialize` derive to `Path` struct ([b9d0083](https://github.com/kiki-kanri/rs-pathkit/commit/b9d0083))
+
+### 🏡 Chore
+
+- Update deps ([6760325](https://github.com/kiki-kanri/rs-pathkit/commit/6760325))
+
+### ❤️ Contributors
+
+- Kiki-kanri
+
 ## v0.9.2
 
 [compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v0.9.1...v0.9.2)
