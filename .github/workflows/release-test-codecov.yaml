@@ -20,10 +20,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@latest
 
       - name: Set up rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: actions-rust-lang/setup-rust-toolchain@latest
         with:
           toolchain: ${{ matrix.rust }}
 
@@ -31,15 +31,15 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Run tests and show coverage
-        run: cargo llvm-cov --all-features --color always
+        run: cargo coverage
 
       - name: Generate lcov report
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cargo llvm-cov --all-features --lcov --output-path lcov.info
+        run: cargo coverage-generate
 
       - name: Upload lcov report to codecov
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@latest
         with:
           fail_ci_if_error: true
           files: ./lcov.info
