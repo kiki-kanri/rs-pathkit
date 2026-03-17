@@ -259,6 +259,7 @@ mod tests {
     }
 
     // Test is_symlink_sync
+    #[cfg(unix)]
     #[test]
     fn test_is_symlink_sync() -> Result<()> {
         let temp_dir = TempDir::new()?;
@@ -470,6 +471,7 @@ mod tests {
     }
 
     // Test set_permissions_sync
+    #[cfg(unix)]
     #[test]
     fn test_set_permissions_sync() -> Result<()> {
         use std::os::unix::fs::PermissionsExt;

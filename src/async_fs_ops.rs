@@ -203,7 +203,7 @@ impl AsyncFsOps for Path {
 
 #[cfg(test)]
 mod tests {
-    use std::os::unix::fs::PermissionsExt;
+    use std::fs;
 
     use serde::Deserialize;
     use tempfile::{
@@ -273,6 +273,7 @@ mod tests {
     }
 
     // Test is_symlink
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_is_symlink() -> Result<()> {
         let temp_dir = TempDir::new()?;
@@ -280,7 +281,6 @@ mod tests {
         async_fs::write(&target, "test").await?;
 
         let link = temp_dir.path().join("link.txt");
-        #[cfg(unix)]
         std::os::unix::fs::symlink(&target, &link)?;
 
         let link_path = Path::new(&link);
@@ -493,9 +493,10 @@ mod tests {
     }
 
     // Test set_permissions
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_set_permissions() -> Result<()> {
-        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
 
         let temp_file = NamedTempFile::new()?;
         let file_path = Path::new(temp_file.path());
@@ -517,11 +518,11 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(unix)]
     // Test chmod
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_chmod() -> Result<()> {
-        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
 
         let temp_file = NamedTempFile::new()?;
         let file_path = Path::new(temp_file.path());
@@ -541,7 +542,7 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn test_chown() -> Result<()> {
-        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
 
         // Skip if not root (chown requires root privileges)
         if unsafe { libc::geteuid() } != 0 {
