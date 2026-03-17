@@ -537,11 +537,16 @@ mod tests {
         Ok(())
     }
 
+    // Test chown - requires root, skip if not root
     #[cfg(unix)]
-    // Test chown
     #[tokio::test]
     async fn test_chown() -> Result<()> {
         use std::fs;
+
+        // Skip if not root (chown requires root privileges)
+        if unsafe { libc::geteuid() } != 0 {
+            return Ok(());
+        }
 
         let temp_file = NamedTempFile::new()?;
         let file_path = Path::new(temp_file.path());

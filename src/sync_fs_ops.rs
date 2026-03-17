@@ -512,11 +512,16 @@ mod tests {
         Ok(())
     }
 
+    // Test chown_sync - requires root, skip if not root
     #[cfg(unix)]
-    // Test chown_sync
     #[test]
     fn test_chown_sync() -> Result<()> {
         use std::os::unix::fs::PermissionsExt;
+
+        // Skip if not root (chown requires root privileges)
+        if unsafe { libc::geteuid() } != 0 {
+            return Ok(());
+        }
 
         let temp_file = NamedTempFile::new()?;
         let file_path = Path::new(temp_file.path());
