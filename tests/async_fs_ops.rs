@@ -26,3 +26,15 @@ async fn chmod() -> Result<()> {
 
     return Ok(());
 }
+
+#[tokio::test]
+async fn remove_file() -> Result<()> {
+    let temp_file = NamedTempFile::new()?;
+    let file_path = Path::new(temp_file.path());
+
+    assert!(file_path.exists().await?);
+    file_path.remove_file().await?;
+    assert!(!file_path.exists().await?);
+
+    Ok(())
+}

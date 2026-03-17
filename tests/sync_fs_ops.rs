@@ -21,3 +21,15 @@ fn chmod_sync() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn remove_file_sync() -> Result<()> {
+    let temp_file = NamedTempFile::new()?;
+    let file_path = Path::new(temp_file.path());
+
+    assert!(file_path.exists_sync()?);
+    file_path.remove_file_sync()?;
+    assert!(!file_path.exists_sync()?);
+
+    Ok(())
+}

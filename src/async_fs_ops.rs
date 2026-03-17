@@ -49,6 +49,7 @@ pub trait AsyncFsOps {
     async fn read_to_string(&self) -> Result<String>;
     async fn remove_dir(&self) -> Result<()>;
     async fn remove_dir_all(&self) -> Result<()>;
+    async fn remove_file(&self) -> Result<()>;
     async fn set_permissions(&self, permissions: Permissions) -> Result<()>;
     async fn truncate(&self, len: Option<u64>) -> Result<()>;
     async fn write(&self, contents: impl AsRef<[u8]> + Send) -> Result<()>;
@@ -168,6 +169,10 @@ impl AsyncFsOps for Path {
 
     async fn remove_dir(&self) -> Result<()> {
         Ok(fs::remove_dir(self).await?)
+    }
+
+    async fn remove_file(&self) -> Result<()> {
+        Ok(fs::remove_file(self).await?)
     }
 
     async fn remove_dir_all(&self) -> Result<()> {

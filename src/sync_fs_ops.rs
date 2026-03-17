@@ -46,6 +46,7 @@ pub trait SyncFsOps {
     fn read_to_string_sync(&self) -> Result<String>;
     fn remove_dir_all_sync(&self) -> Result<()>;
     fn remove_dir_sync(&self) -> Result<()>;
+    fn remove_file_sync(&self) -> Result<()>;
     fn set_permissions_sync(&self, permissions: Permissions) -> Result<()>;
     fn truncate_sync(&self, len: Option<u64>) -> Result<()>;
     fn write_sync(&self, contents: impl AsRef<[u8]>) -> Result<()>;
@@ -164,6 +165,10 @@ impl SyncFsOps for Path {
 
     fn remove_dir_sync(&self) -> Result<()> {
         Ok(fs::remove_dir(self)?)
+    }
+
+    fn remove_file_sync(&self) -> Result<()> {
+        Ok(fs::remove_file(self)?)
     }
 
     fn set_permissions_sync(&self, permissions: Permissions) -> Result<()> {
