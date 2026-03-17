@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@latest
+        uses: actions/checkout@v6
 
       - name: Set up rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
