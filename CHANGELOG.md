@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.9.5
+
+[compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v0.9.4...v0.9.5)
+
+### 🏡 Chore
+
+- Lint code ([79da0d8](https://github.com/kiki-kanri/rs-pathkit/commit/79da0d8))
+
+### ✅ Tests
+
+- Update and add all units ([40c6716](https://github.com/kiki-kanri/rs-pathkit/commit/40c6716))
+- Fix chown requires root privileges issues ([48a8c66](https://github.com/kiki-kanri/rs-pathkit/commit/48a8c66))
+
+### 🤖 CI
+
+- Update workflow file ([bd80ede](https://github.com/kiki-kanri/rs-pathkit/commit/bd80ede))
+
+### ❤️ Contributors
+
+- Kiki-kanri
+
 ## v0.9.4
 
 [compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v0.9.3...v0.9.4)
