@@ -267,6 +267,6 @@ mod tests {
     fn test_path_has_content() {
         let path = Path::new("/test/path");
         // Just verify the path string is not empty
-        assert!(path.to_str().unwrap().len() > 0);
+        assert!(!path.to_str().unwrap().is_empty());
     }
 }
