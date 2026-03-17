@@ -59,3 +59,288 @@ impl Path {
         Self::new(self.0.with_extension(extension))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsStr;
+
+    use super::*;
+
+    #[test]
+    fn test_new() {
+        // Test with &str
+        let path = Path::new("/test/path");
+        assert_eq!(path.to_str(), Some("/test/path"));
+
+        // Test with String
+        let path = Path::new(String::from("/test/path"));
+        assert_eq!(path.to_str(), Some("/test/path"));
+
+        // Test with PathBuf
+        let path = Path::new(PathBuf::from("/test/path"));
+        assert_eq!(path.to_str(), Some("/test/path"));
+    }
+
+    #[test]
+    fn test_as_path() {
+        let path = Path::new("/test/path");
+        let std_path: &std::path::Path = path.as_path();
+        assert_eq!(std_path, std::path::Path::new("/test/path"));
+    }
+
+    #[test]
+    fn test_to_path_buf() {
+        let path = Path::new("/test/path");
+        let path_buf = path.to_path_buf();
+        assert_eq!(path_buf, PathBuf::from("/test/path"));
+    }
+
+    #[test]
+    fn test_join() {
+        let path = Path::new("/base");
+        assert_eq!(path.join("subdir").to_str(), Some("/base/subdir"));
+        assert_eq!(path.join("subdir/file.txt").to_str(), Some("/base/subdir/file.txt"));
+
+        // Join with Path
+        let subpath = Path::new("subpath");
+        assert_eq!(path.join(subpath).to_str(), Some("/base/subpath"));
+    }
+
+    #[test]
+    fn test_parent() {
+        let path = Path::new("/base/subdir/file.txt");
+        assert_eq!(path.parent().unwrap().to_str(), Some("/base/subdir"));
+
+        // Test root path
+        let path = Path::new("/");
+        assert!(path.parent().is_none());
+
+        // Test relative path with no parent
+        let path = Path::new("file.txt");
+        assert!(path.parent().is_some());
+    }
+
+    #[test]
+    fn test_with_extension() {
+        let path = Path::new("/path/to/file.txt");
+        assert_eq!(path.with_extension("md").to_str(), Some("/path/to/file.md"));
+
+        // Test adding extension to file without extension
+        let path = Path::new("/path/to/file");
+        assert_eq!(path.with_extension("txt").to_str(), Some("/path/to/file.txt"));
+
+        // Test replacing extension
+        let path = Path::new("/path/to/file.txt");
+        assert_eq!(path.with_extension("json").to_str(), Some("/path/to/file.json"));
+    }
+
+    #[test]
+    fn test_is_absolute() {
+        let path = Path::new("/absolute/path");
+        assert!(path.is_absolute());
+
+        let relative_path = Path::new("relative/path");
+        assert!(!relative_path.is_absolute());
+
+        #[cfg(windows)]
+        {
+            let path = Path::new("C:\\absolute\\path");
+            assert!(path.is_absolute());
+        }
+    }
+
+    #[test]
+    fn test_is_relative() {
+        let path = Path::new("/absolute/path");
+        assert!(!path.is_relative());
+
+        let relative_path = Path::new("relative/path");
+        assert!(relative_path.is_relative());
+    }
+
+    #[test]
+    fn test_file_name() {
+        let path = Path::new("/path/to/file.txt");
+        assert_eq!(path.file_name(), Some(OsStr::new("file.txt")));
+
+        // Note: std::path::Path ignores trailing slash and returns the last component
+        let path = Path::new("/path/to/");
+        assert_eq!(path.file_name(), Some(OsStr::new("to")));
+
+        let path = Path::new("/");
+        assert_eq!(path.file_name(), None);
+    }
+
+    #[test]
+    fn test_file_stem() {
+        let path = Path::new("file.txt");
+        assert_eq!(path.file_stem(), Some(OsStr::new("file")));
+
+        let path = Path::new(".hidden");
+        assert_eq!(path.file_stem(), Some(OsStr::new(".hidden")));
+
+        let path = Path::new("file.tar.gz");
+        assert_eq!(path.file_stem(), Some(OsStr::new("file.tar")));
+    }
+
+    #[test]
+    fn test_extension() {
+        let path = Path::new("file.txt");
+        assert_eq!(path.extension(), Some(OsStr::new("txt")));
+
+        let path = Path::new("file.tar.gz");
+        assert_eq!(path.extension(), Some(OsStr::new("gz")));
+
+        let path = Path::new("file");
+        assert_eq!(path.extension(), None);
+
+        let path = Path::new("/path/to.");
+        assert_eq!(path.extension(), Some(OsStr::new("")));
+    }
+
+    #[test]
+    fn test_starts_with() {
+        let path = Path::new("/path/to/file");
+        // starts_with is part of std::path::Path, available through Deref
+        assert!(path.starts_with("/path"));
+        assert!(path.starts_with(std::path::Path::new("/path")));
+        assert!(!path.starts_with("/other"));
+    }
+
+    #[test]
+    fn test_ends_with() {
+        let path = Path::new("/path/to/file.txt");
+        assert!(path.ends_with("file.txt"));
+        assert!(path.ends_with(std::path::Path::new("to/file.txt")));
+        assert!(!path.ends_with("other.txt"));
+    }
+
+    #[test]
+    fn test_components() {
+        let path = Path::new("/path/to/file.txt");
+        let components: Vec<_> = path.components().collect();
+        assert!(components.len() >= 3);
+    }
+
+    #[test]
+    fn test_iter() {
+        let path = Path::new("/path/to/file.txt");
+        let iter = path.iter();
+        let components: Vec<_> = iter.collect();
+        assert!(!components.is_empty());
+    }
+
+    // Skip contains test - Path doesn't have this method
+    // Skip set_file_name test - Path doesn't have this method
+    // Skip set_extension test - Path doesn't have this method
+    // Skip pop test - Path doesn't have this method
+    // Skip push test - Path doesn't have this method
+
+    #[test]
+    fn test_absolute_path_functionality() -> Result<()> {
+        // Test absolutize
+        let path = Path::new(".");
+        let absolute = path.absolutize()?;
+        assert!(absolute.is_absolute());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_absolutize_from() -> Result<()> {
+        let path = Path::new("subdir");
+        let absolute = path.absolutize_from("/base")?;
+        assert_eq!(absolute.to_str(), Some("/base/subdir"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_absolutize_virtually() -> Result<()> {
+        let path = Path::new("subdir/file.txt");
+        let absolute = path.absolutize_virtually("/virtual")?;
+        assert_eq!(absolute.to_str(), Some("/virtual/subdir/file.txt"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_canonicalize() -> Result<()> {
+        let path = Path::new(".");
+        let canonical = path.canonicalize()?;
+        assert!(canonical.is_absolute());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_display() {
+        let path = Path::new("/test/path");
+        assert_eq!(format!("{}", path), "/test/path");
+    }
+
+    #[test]
+    fn test_debug() {
+        let path = Path::new("/test/path");
+        let debug_str = format!("{:?}", path);
+        assert!(debug_str.contains("Path"));
+    }
+
+    #[test]
+    fn test_eq() {
+        let path1 = Path::new("/test/path");
+        let path2 = Path::new("/test/path");
+        let path3 = Path::new("/other/path");
+
+        assert_eq!(path1, path2);
+        assert_ne!(path1, path3);
+    }
+
+    #[test]
+    fn test_hash() {
+        use std::{
+            collections::hash_map::DefaultHasher,
+            hash::{
+                Hash,
+                Hasher,
+            },
+        };
+
+        let path1 = Path::new("/test/path");
+        let path2 = Path::new("/test/path");
+
+        let mut hasher1 = DefaultHasher::new();
+        let mut hasher2 = DefaultHasher::new();
+
+        path1.hash(&mut hasher1);
+        path2.hash(&mut hasher2);
+
+        assert_eq!(hasher1.finish(), hasher2.finish());
+    }
+
+    #[test]
+    fn test_ord() {
+        use std::cmp::Ordering;
+
+        let path1 = Path::new("/a/b");
+        let path2 = Path::new("/a/c");
+
+        assert_eq!(path1.cmp(&path2), Ordering::Less);
+        assert_eq!(path2.cmp(&path1), Ordering::Greater);
+        assert_eq!(path1.cmp(&path1), Ordering::Equal);
+    }
+
+    #[test]
+    fn test_from_pathbuf() {
+        let pathbuf = PathBuf::from("/test/path");
+        let path = Path::new(pathbuf);
+        assert_eq!(path.to_path_buf(), PathBuf::from("/test/path"));
+    }
+
+    #[test]
+    fn test_from_std_path() {
+        let std_path = std::path::Path::new("/test/path");
+        let path = Path::from(std_path);
+        assert_eq!(path.to_str(), Some("/test/path"));
+    }
+}
