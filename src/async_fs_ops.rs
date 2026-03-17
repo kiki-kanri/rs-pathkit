@@ -203,8 +203,6 @@ impl AsyncFsOps for Path {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-
     use serde::Deserialize;
     use tempfile::{
         NamedTempFile,
@@ -496,7 +494,10 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn test_set_permissions() -> Result<()> {
-        use std::os::unix::fs::PermissionsExt;
+        use std::{
+            fs,
+            os::unix::fs::PermissionsExt,
+        };
 
         let temp_file = NamedTempFile::new()?;
         let file_path = Path::new(temp_file.path());
@@ -522,7 +523,10 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn test_chmod() -> Result<()> {
-        use std::os::unix::fs::PermissionsExt;
+        use std::{
+            fs,
+            os::unix::fs::PermissionsExt,
+        };
 
         let temp_file = NamedTempFile::new()?;
         let file_path = Path::new(temp_file.path());
@@ -542,7 +546,10 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn test_chown() -> Result<()> {
-        use std::os::unix::fs::PermissionsExt;
+        use std::{
+            fs,
+            os::unix::fs::PermissionsExt,
+        };
 
         // Skip if not root (chown requires root privileges)
         if unsafe { libc::geteuid() } != 0 {

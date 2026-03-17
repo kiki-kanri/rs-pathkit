@@ -190,8 +190,6 @@ impl SyncFsOps for Path {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-
     use serde::Deserialize;
     use tempfile::{
         NamedTempFile,
