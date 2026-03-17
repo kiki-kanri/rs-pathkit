@@ -1,3 +1,8 @@
+//! Core path operations module
+//!
+//! This module provides the main `Path` struct which wraps `std::path::PathBuf`
+//! and provides extended functionality similar to Python's pathlib.
+
 use std::{
     ffi::OsStr,
     fs::canonicalize,
@@ -14,47 +19,213 @@ use serde::{
     Serialize,
 };
 
+/// A wrapper around `std::path::PathBuf` that provides extended path operations.
+///
+/// `Path` is similar to Python's `pathlib.Path`, providing an object-oriented
+/// interface for path manipulation. It wraps `std::path::PathBuf` and implements
+/// various traits for seamless interoperability with the standard library.
+///
+/// # Features
+///
+/// - **Serde Support**: Can be serialized and deserialized
+/// - **Trait Implementations**: Implements `AsRef`, `Borrow`, `Deref`, `Display`, `From`
+/// - **Path Joining**: Supports the `/` operator via the `Div` trait
+///
+/// # Example
+///
+/// ```rust
+/// use pathkit::Path;
+///
+/// // Create a path
+/// let path = Path::new("/home/user/project");
+///
+/// // Join paths
+/// let config = path.join("config.json");
+///
+/// // Use / operator (note: this consumes the path)
+/// let nested = Path::new("/home/user") / "project" / "subdir";
+///
+/// // Get path components
+/// let parent = path.parent();
+/// let file_name = path.file_name();
+/// let extension = path.extension();
+/// ```
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct Path(pub(crate) PathBuf);
 
 impl Path {
+    /// Creates a new `Path` from a given path.
+    ///
+    /// This method accepts any type that can be converted to `PathBuf`,
+    /// including `&str`, `String`, `PathBuf`, and `&Path`.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use pathkit::Path;
+    ///
+    /// // From &str
+    /// let path = Path::new("/test/path");
+    ///
+    /// // From String
+    /// let path = Path::new(String::from("/test/path"));
+    ///
+    /// // From PathBuf
+    /// use std::path::PathBuf;
+    /// let path = Path::new(PathBuf::from("/test/path"));
+    /// ```
     pub fn new<P: Into<PathBuf>>(path: P) -> Self {
         Self(path.into())
     }
 
+    /// Converts the path to an absolute path.
+    ///
+    /// This uses the `path-absolutize` crate which handles edge cases
+    /// like converting relative paths to absolute paths.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use pathkit::Path;
+    ///
+    /// let path = Path::new("relative/path");
+    /// let absolute = path.absolutize()?;
+    /// assert!(absolute.is_absolute());
+    /// ```
     pub fn absolutize(&self) -> Result<Self> {
         Ok(Self::new(self.0.absolutize()?))
     }
 
+    /// Converts the path to an absolute path, using the given directory as base.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use pathkit::Path;
+    ///
+    /// let path = Path::new("relative/path");
+    /// let absolute = path.absolutize_from("/custom/cwd")?;
+    /// ```
     pub fn absolutize_from(&self, cwd: impl AsRef<StdPath>) -> Result<Self> {
         Ok(Self::new(self.0.absolutize_from(cwd)?))
     }
 
+    /// Converts a relative path to an absolute path with a virtual root.
+    ///
+    /// This is useful for testing or sandboxed environments where you want
+    /// to treat a directory as the root.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use pathkit::Path;
+    ///
+    /// let path = Path::new("subdir/file.txt");
+    /// let absolute = path.absolutize_virtually("/virtual/root")?;
+    /// assert_eq!(absolute.to_str(), Some("/virtual/root/subdir/file.txt"));
+    /// ```
     pub fn absolutize_virtually(&self, virtual_root: impl AsRef<StdPath>) -> Result<Self> {
         Ok(Self::new(self.0.absolutize_virtually(virtual_root)?))
     }
 
+    /// Returns a reference to the underlying `std::path::Path`.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use pathkit::Path;
+    ///
+    /// let path = Path::new("/test/path");
+    /// let std_path = path.as_path();
+    /// assert_eq!(std_path, std::path::Path::new("/test/path"));
+    /// ```
     pub fn as_path(&self) -> &StdPath {
         &self.0
     }
 
+    /// Returns the canonical form of the path.
+    ///
+    /// This resolves symlinks and normalizes the path. Unlike `absolutize`,
+    /// this requires the path to exist.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use pathkit::Path;
+    ///
+    /// let path = Path::new(".");
+    /// let canonical = path.canonicalize()?;
+    /// assert!(canonical.is_absolute());
+    /// ```
     pub fn canonicalize(&self) -> Result<Self, std::io::Error> {
         canonicalize(&self.0).map(Self::new)
     }
 
+    /// Joins this path with another path.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use pathkit::Path;
+    ///
+    /// let path = Path::new("/base");
+    /// let joined = path.join("subdir/file.txt");
+    /// assert_eq!(joined.to_str(), Some("/base/subdir/file.txt"));
+    /// ```
     pub fn join(&self, path: impl AsRef<StdPath>) -> Self {
         Self::new(self.0.join(path))
     }
 
+    /// Returns the parent directory of this path.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use pathkit::Path;
+    ///
+    /// let path = Path::new("/base/subdir/file.txt");
+    /// assert_eq!(path.parent().unwrap().to_str(), Some("/base/subdir"));
+    ///
+    /// // Root path has no parent
+    /// let root = Path::new("/");
+    /// assert!(root.parent().is_none());
+    /// ```
     pub fn parent(&self) -> Option<Self> {
         self.0.parent().map(Self::new)
     }
 
+    /// Converts this path to a `PathBuf`.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use pathkit::Path;
+    /// use std::path::PathBuf;
+    ///
+    /// let path = Path::new("/test/path");
+    /// let buf: PathBuf = path.to_path_buf();
+    /// assert_eq!(buf, PathBuf::from("/test/path"));
+    /// ```
     pub fn to_path_buf(&self) -> PathBuf {
         self.0.clone()
     }
 
+    /// Returns a new path with a different file extension.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use pathkit::Path;
+    ///
+    /// // Replace extension
+    /// let path = Path::new("/path/to/file.txt");
+    /// assert_eq!(path.with_extension("md").to_str(), Some("/path/to/file.md"));
+    ///
+    /// // Add extension to file without one
+    /// let path = Path::new("/path/to/file");
+    /// assert_eq!(path.with_extension("txt").to_str(), Some("/path/to/file.txt"));
+    /// ```
     pub fn with_extension<S: AsRef<OsStr>>(&self, extension: S) -> Self {
         Self::new(self.0.with_extension(extension))
     }

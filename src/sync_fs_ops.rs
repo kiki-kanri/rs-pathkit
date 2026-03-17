@@ -1,3 +1,18 @@
+//! Synchronous file system operations module
+//!
+//! This module provides the `SyncFsOps` trait for synchronous file system operations.
+//! Implement this trait on any type to provide blocking file operations.
+//!
+//! # Example
+//!
+//! ```rust,ignore
+//! use pathkit::{Path, SyncFsOps};
+//!
+//! let path = Path::new("/tmp/test.txt");
+//! path.write_sync(b"Hello!")?;
+//! let content = path.read_sync()?;
+//! ```
+
 use std::fs::{
     self,
     Metadata,
@@ -18,6 +33,30 @@ use serde_json::{
 
 use super::core::Path;
 
+/// Trait for synchronous file system operations.
+///
+/// This trait provides blocking file system operations similar to Python's pathlib.
+/// It is implemented for `Path` but can be implemented for other types as well.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use pathkit::{Path, SyncFsOps};
+///
+/// let path = Path::new("/tmp/test.txt");
+///
+/// // Check if file exists
+/// if path.exists_sync()? {
+///     // Read file contents
+///     let content = path.read_sync()?;
+/// }
+///
+/// // Write to file
+/// path.write_sync(b"Hello, world!")?;
+///
+/// // Get file size
+/// let size = path.get_file_size_sync()?;
+/// ```
 pub trait SyncFsOps {
     #[cfg(unix)]
     fn chmod_sync(&self, mode: u32) -> Result<()>;

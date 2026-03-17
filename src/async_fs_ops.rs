@@ -1,3 +1,18 @@
+//! Asynchronous file system operations module
+//!
+//! This module provides the `AsyncFsOps` trait for asynchronous file system operations.
+//! Requires the `async-fs-ops` feature to be enabled.
+//!
+//! # Example
+//!
+//! ```rust,ignore
+//! use pathkit::{Path, AsyncFsOps};
+//!
+//! let path = Path::new("/tmp/test.txt");
+//! path.write(b"Hello!").await?;
+//! let content = path.read().await?;
+//! ```
+
 use std::fs::{
     Metadata,
     Permissions,
@@ -20,6 +35,32 @@ use tokio::fs::{
 
 use super::core::Path;
 
+/// Trait for asynchronous file system operations.
+///
+/// This trait provides non-blocking file system operations similar to Python's pathlib.
+/// It is implemented for `Path` but can be implemented for other types as well.
+///
+/// Requires the `async-fs-ops` feature to be enabled.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use pathkit::{Path, AsyncFsOps};
+///
+/// let path = Path::new("/tmp/test.txt");
+///
+/// // Check if file exists
+/// if path.exists().await? {
+///     // Read file contents
+///     let content = path.read().await?;
+/// }
+///
+/// // Write to file
+/// path.write(b"Hello, world!").await?;
+///
+/// // Get file size
+/// let size = path.get_file_size().await?;
+/// ```
 #[async_trait::async_trait]
 pub trait AsyncFsOps {
     #[cfg(unix)]
