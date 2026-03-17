@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.9.4
+
+[compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v0.9.3...v0.9.4)
+
+### 🚀 Enhancements
+
+- Add `remove_file` method ([cbd941c](https://github.com/kiki-kanri/rs-pathkit/commit/cbd941c))
+
+### 🏡 Chore
+
+- Update cargo alias ([1ac4ec5](https://github.com/kiki-kanri/rs-pathkit/commit/1ac4ec5))
+- Update release script ([3055211](https://github.com/kiki-kanri/rs-pathkit/commit/3055211))
+
+### 🤖 CI
+
+- Update workflow file ([02859f8](https://github.com/kiki-kanri/rs-pathkit/commit/02859f8))
+
+### ❤️ Contributors
+
+- Kiki-kanri
+
 ## v0.9.3
 
 [compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v0.9.2...v0.9.3)
