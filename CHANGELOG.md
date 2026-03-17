@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.9.6
+
+[compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v0.9.5...v0.9.6)
+
+### 📖 Documentation
+
+- Update README and add docs ([ce2fa00](https://github.com/kiki-kanri/rs-pathkit/commit/ce2fa00))
+
+### ✅ Tests
+
+- Fix windows errors ([073f9c3](https://github.com/kiki-kanri/rs-pathkit/commit/073f9c3))
+- Resolve errors ([2617a30](https://github.com/kiki-kanri/rs-pathkit/commit/2617a30))
+
+### 🤖 CI
+
+- Update workflow file ([fa548d7](https://github.com/kiki-kanri/rs-pathkit/commit/fa548d7))
+- Update workflow file ([458c174](https://github.com/kiki-kanri/rs-pathkit/commit/458c174))
+
+### ❤️ Contributors
+
+- Kiki-kanri
+
 ## v0.9.5
 
 [compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v0.9.4...v0.9.5)
