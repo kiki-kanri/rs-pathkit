@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.9.7
+
+[compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v0.9.6...v0.9.7)
+
+### ✅ Tests
+
+- Resolve windows issues ([91c1057](https://github.com/kiki-kanri/rs-pathkit/commit/91c1057))
+
+### ❤️ Contributors
+
+- Kiki-kanri
+
 ## v0.9.6
 
 [compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v0.9.5...v0.9.6)
