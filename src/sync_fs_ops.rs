@@ -79,17 +79,17 @@ pub trait SyncFsOps {
     fn is_socket_sync(&self) -> Result<bool>;
     fn is_symlink_sync(&self) -> Result<bool>;
     fn metadata_sync(&self) -> Result<Metadata>;
-    fn read_sync(&self) -> Result<Vec<u8>>;
     fn read_dir_sync(&self) -> Result<ReadDir>;
     fn read_json_sync<T: DeserializeOwned>(&self) -> Result<T>;
+    fn read_sync(&self) -> Result<Vec<u8>>;
     fn read_to_string_sync(&self) -> Result<String>;
     fn remove_dir_all_sync(&self) -> Result<()>;
     fn remove_dir_sync(&self) -> Result<()>;
     fn remove_file_sync(&self) -> Result<()>;
     fn set_permissions_sync(&self, permissions: Permissions) -> Result<()>;
     fn truncate_sync(&self, len: Option<u64>) -> Result<()>;
-    fn write_sync(&self, contents: impl AsRef<[u8]>) -> Result<()>;
     fn write_json_sync(&self, data: impl Serialize) -> Result<()>;
+    fn write_sync(&self, contents: impl AsRef<[u8]>) -> Result<()>;
 }
 
 impl SyncFsOps for Path {
@@ -182,16 +182,16 @@ impl SyncFsOps for Path {
         Ok(fs::metadata(self)?)
     }
 
-    fn read_sync(&self) -> Result<Vec<u8>> {
-        Ok(fs::read(self)?)
-    }
-
     fn read_dir_sync(&self) -> Result<ReadDir> {
         Ok(fs::read_dir(self)?)
     }
 
     fn read_json_sync<T: DeserializeOwned>(&self) -> Result<T> {
         Ok(from_slice::<T>(&self.read_sync()?)?)
+    }
+
+    fn read_sync(&self) -> Result<Vec<u8>> {
+        Ok(fs::read(self)?)
     }
 
     fn read_to_string_sync(&self) -> Result<String> {
@@ -218,12 +218,12 @@ impl SyncFsOps for Path {
         Ok(OpenOptions::new().write(true).open(self)?.set_len(len.unwrap_or(0))?)
     }
 
-    fn write_sync(&self, contents: impl AsRef<[u8]>) -> Result<()> {
-        Ok(fs::write(self, contents)?)
-    }
-
     fn write_json_sync(&self, data: impl Serialize) -> Result<()> {
         self.write_sync(to_vec_pretty(&data)?)
+    }
+
+    fn write_sync(&self, contents: impl AsRef<[u8]>) -> Result<()> {
+        Ok(fs::write(self, contents)?)
     }
 }
 
