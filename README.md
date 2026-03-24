@@ -118,9 +118,21 @@ Path::new("/tmp/new_project").create_dir_all().await?;
 - `create_dir_sync()`, `create_dir_all_sync()`, `remove_dir_sync()`
 - `remove_file_sync()`, `remove_dir_all_sync()`
 - `metadata_sync()`, `get_file_size_sync()`, `truncate_sync()`
-- `set_permissions_sync()`, `read_dir_sync()`, `empty_dir_sync()`
+- `set_permissions_sync()`, `read_dir_sync()`, `read_dir_names_sync()`, `read_dir_paths_sync()`, `empty_dir_sync()`
 - `chmod_sync()`, `chown_sync()` (Unix only)
 - `is_block_device_sync()`, `is_char_device_sync()`, `is_fifo_sync()`, `is_socket_sync()` (Unix only)
+- `copy_file_sync()`, `hard_link_sync()`, `soft_link_sync()` (Unix only)
+- `read_link_sync()`, `symlink_metadata_sync()` (Unix only)
+- `touch_sync()`
+
+### Trait Implementations
+`Path` implements a rich set of standard library traits for interoperability:
+- `AsRef<Path>` / `AsRef<PathBuf>` / `AsRef<OsStr>` / `AsRef<str>` — use `Path` wherever these types are expected
+- `Borrow<Path>` — use `Path` as a map key with `std::collections` hash types
+- `Deref<Target = Path>` — transparent access to `std::path::Path` methods
+- `Display` / `Debug` / `Serialize` / `Deserialize` — string-like and serde support
+- `From<&str>` / `From<&Path>` / `From<String>` / `From<Path> for String` — seamless conversions
+- `Div<&str>` / `Div<String>` / `Div<&Path>` / `Div<Path>` — use `/` operator: `path / "subdir"`
 
 ### File System Operations (AsyncFsOps)
 Same operations as SyncFsOps but async:
