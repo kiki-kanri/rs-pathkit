@@ -67,8 +67,8 @@ pub trait AsyncFsOps {
     async fn chmod(&self, mode: u32) -> Result<()>;
     #[cfg(unix)]
     async fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> Result<()>;
-    async fn create_dir(&self) -> Result<()>;
     async fn create_dir_all(&self) -> Result<()>;
+    async fn create_dir(&self) -> Result<()>;
     async fn empty_dir(&self) -> Result<()>;
     async fn exists(&self) -> Result<bool>;
     async fn get_file_size(&self) -> Result<u64>;
@@ -84,17 +84,17 @@ pub trait AsyncFsOps {
     async fn is_socket(&self) -> Result<bool>;
     async fn is_symlink(&self) -> Result<bool>;
     async fn metadata(&self) -> Result<Metadata>;
-    async fn read(&self) -> Result<Vec<u8>>;
     async fn read_dir(&self) -> Result<ReadDir>;
     async fn read_json<T: DeserializeOwned>(&self) -> Result<T>;
+    async fn read(&self) -> Result<Vec<u8>>;
     async fn read_to_string(&self) -> Result<String>;
-    async fn remove_dir(&self) -> Result<()>;
     async fn remove_dir_all(&self) -> Result<()>;
+    async fn remove_dir(&self) -> Result<()>;
     async fn remove_file(&self) -> Result<()>;
     async fn set_permissions(&self, permissions: Permissions) -> Result<()>;
     async fn truncate(&self, len: Option<u64>) -> Result<()>;
+    async fn write_json<T: Serialize + Send>(&self, data: T) -> Result<()>;
     async fn write(&self, contents: impl AsRef<[u8]> + Send) -> Result<()>;
-    async fn write_json(&self, data: impl Serialize + Send) -> Result<()>;
 }
 
 #[async_trait::async_trait]
@@ -233,12 +233,12 @@ impl AsyncFsOps for Path {
             .await?)
     }
 
-    async fn write(&self, contents: impl AsRef<[u8]> + Send) -> Result<()> {
-        Ok(fs::write(self, contents).await?)
+    async fn write_json<T: Serialize + Send>(&self, data: T) -> Result<()> {
+        self.write(to_vec_pretty(&data)?).await
     }
 
-    async fn write_json(&self, data: impl Serialize + Send) -> Result<()> {
-        self.write(to_vec_pretty(&data)?).await
+    async fn write(&self, contents: impl AsRef<[u8]> + Send) -> Result<()> {
+        Ok(fs::write(self, contents).await?)
     }
 }
 

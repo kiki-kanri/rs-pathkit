@@ -13,15 +13,24 @@
 //! let content = path.read_sync()?;
 //! ```
 
-use std::fs::{
-    self,
-    Metadata,
-    OpenOptions,
-    Permissions,
-    ReadDir,
+use std::{
+    fs::{
+        self,
+        File,
+        Metadata,
+        OpenOptions,
+        Permissions,
+        ReadDir,
+    },
+    path::PathBuf,
+    time::SystemTime,
 };
 
 use anyhow::Result;
+use filetime::{
+    set_file_mtime,
+    FileTime,
+};
 use serde::{
     de::DeserializeOwned,
     Serialize,
@@ -62,11 +71,13 @@ pub trait SyncFsOps {
     fn chmod_sync(&self, mode: u32) -> Result<()>;
     #[cfg(unix)]
     fn chown_sync(&self, uid: Option<u32>, gid: Option<u32>) -> Result<()>;
+    fn copy_file_sync(&self, dest: impl AsRef<PathBuf>) -> Result<u64>;
     fn create_dir_all_sync(&self) -> Result<()>;
     fn create_dir_sync(&self) -> Result<()>;
     fn empty_dir_sync(&self) -> Result<()>;
     fn exists_sync(&self) -> Result<bool>;
     fn get_file_size_sync(&self) -> Result<u64>;
+    fn hard_link_sync(&self, link: impl AsRef<PathBuf>) -> Result<()>;
     #[cfg(unix)]
     fn is_block_device_sync(&self) -> Result<bool>;
     #[cfg(unix)]
@@ -79,16 +90,23 @@ pub trait SyncFsOps {
     fn is_socket_sync(&self) -> Result<bool>;
     fn is_symlink_sync(&self) -> Result<bool>;
     fn metadata_sync(&self) -> Result<Metadata>;
+    fn read_dir_names_sync(&self) -> Result<Vec<String>>;
+    fn read_dir_paths_sync(&self) -> Result<Vec<Path>>;
     fn read_dir_sync(&self) -> Result<ReadDir>;
     fn read_json_sync<T: DeserializeOwned>(&self) -> Result<T>;
+    fn read_link_sync(&self) -> Result<Path>;
     fn read_sync(&self) -> Result<Vec<u8>>;
     fn read_to_string_sync(&self) -> Result<String>;
     fn remove_dir_all_sync(&self) -> Result<()>;
     fn remove_dir_sync(&self) -> Result<()>;
     fn remove_file_sync(&self) -> Result<()>;
     fn set_permissions_sync(&self, permissions: Permissions) -> Result<()>;
+    #[cfg(unix)]
+    fn soft_link_sync(&self, link: impl AsRef<PathBuf>) -> Result<()>;
+    fn symlink_metadata_sync(&self) -> Result<Metadata>;
+    fn touch_sync(&self) -> Result<()>;
     fn truncate_sync(&self, len: Option<u64>) -> Result<()>;
-    fn write_json_sync(&self, data: impl Serialize) -> Result<()>;
+    fn write_json_sync<T: Serialize>(&self, data: T) -> Result<()>;
     fn write_sync(&self, contents: impl AsRef<[u8]>) -> Result<()>;
 }
 
@@ -103,6 +121,10 @@ impl SyncFsOps for Path {
     #[cfg(unix)]
     fn chown_sync(&self, uid: Option<u32>, gid: Option<u32>) -> Result<()> {
         Ok(std::os::unix::fs::chown(self, uid, gid)?)
+    }
+
+    fn copy_file_sync(&self, dest: impl AsRef<PathBuf>) -> Result<u64> {
+        Ok(fs::copy(self, dest.as_ref())?)
     }
 
     fn create_dir_all_sync(&self) -> Result<()> {
@@ -136,6 +158,10 @@ impl SyncFsOps for Path {
 
     fn get_file_size_sync(&self) -> Result<u64> {
         Ok(self.metadata_sync()?.len())
+    }
+
+    fn hard_link_sync(&self, link: impl AsRef<PathBuf>) -> Result<()> {
+        Ok(fs::hard_link(self, link.as_ref())?)
     }
 
     #[cfg(unix)]
@@ -182,12 +208,34 @@ impl SyncFsOps for Path {
         Ok(fs::metadata(self)?)
     }
 
+    fn read_dir_names_sync(&self) -> Result<Vec<String>> {
+        let mut names = Vec::new();
+        for entry in fs::read_dir(self)? {
+            names.push(entry?.file_name().to_string_lossy().into());
+        }
+
+        Ok(names)
+    }
+
+    fn read_dir_paths_sync(&self) -> Result<Vec<Path>> {
+        let mut paths = Vec::new();
+        for entry in fs::read_dir(self)? {
+            paths.push(Self::new(entry?.path()));
+        }
+
+        Ok(paths)
+    }
+
     fn read_dir_sync(&self) -> Result<ReadDir> {
         Ok(fs::read_dir(self)?)
     }
 
     fn read_json_sync<T: DeserializeOwned>(&self) -> Result<T> {
         Ok(from_slice::<T>(&self.read_sync()?)?)
+    }
+
+    fn read_link_sync(&self) -> Result<Path> {
+        Ok(Self::new(fs::read_link(self)?))
     }
 
     fn read_sync(&self) -> Result<Vec<u8>> {
@@ -214,11 +262,33 @@ impl SyncFsOps for Path {
         Ok(fs::set_permissions(self, permissions)?)
     }
 
+    #[cfg(unix)]
+    fn soft_link_sync(&self, link: impl AsRef<PathBuf>) -> Result<()> {
+        use std::os::unix::fs::symlink;
+
+        Ok(symlink(self, link.as_ref())?)
+    }
+
+    fn symlink_metadata_sync(&self) -> Result<Metadata> {
+        Ok(fs::symlink_metadata(self)?)
+    }
+
+    fn touch_sync(&self) -> Result<()> {
+        if self.exists_sync()? {
+            let t = SystemTime::now();
+            set_file_mtime(self, FileTime::from_system_time(t))?;
+        } else {
+            File::create(self)?;
+        }
+
+        Ok(())
+    }
+
     fn truncate_sync(&self, len: Option<u64>) -> Result<()> {
         Ok(OpenOptions::new().write(true).open(self)?.set_len(len.unwrap_or(0))?)
     }
 
-    fn write_json_sync(&self, data: impl Serialize) -> Result<()> {
+    fn write_json_sync<T: Serialize>(&self, data: T) -> Result<()> {
         self.write_sync(to_vec_pretty(&data)?)
     }
 
