@@ -1,5 +1,39 @@
 # Changelog
 
+## v1.0.0
+
+[compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v0.9.7...v1.0.0)
+
+### 🚀 Enhancements
+
+- Add more methods for sync_fs_ops ([ce1dc34](https://github.com/kiki-kanri/rs-pathkit/commit/ce1dc34))
+- Add sea-orm related impl ([a8edab6](https://github.com/kiki-kanri/rs-pathkit/commit/a8edab6))
+- Add more div and traits ([054beb7](https://github.com/kiki-kanri/rs-pathkit/commit/054beb7))
+
+### 📖 Documentation
+
+- Update README ([a7d9fed](https://github.com/kiki-kanri/rs-pathkit/commit/a7d9fed))
+
+### 🏡 Chore
+
+- Update cargo alias ([3577a55](https://github.com/kiki-kanri/rs-pathkit/commit/3577a55))
+- Update vscode settings ([4db069d](https://github.com/kiki-kanri/rs-pathkit/commit/4db069d))
+- Sort `SyncFsOps` methods ([c5c1a90](https://github.com/kiki-kanri/rs-pathkit/commit/c5c1a90))
+- Fmt code ([94090f2](https://github.com/kiki-kanri/rs-pathkit/commit/94090f2))
+- Lint code ([7185786](https://github.com/kiki-kanri/rs-pathkit/commit/7185786))
+
+### ✅ Tests
+
+- Update units ([99831b4](https://github.com/kiki-kanri/rs-pathkit/commit/99831b4))
+
+### 🤖 CI
+
+- Add test workflow template file ([305020b](https://github.com/kiki-kanri/rs-pathkit/commit/305020b))
+
+### ❤️ Contributors
+
+- Kiki-kanri
+
 ## v0.9.7
 
 [compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v0.9.6...v0.9.7)
