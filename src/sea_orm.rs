@@ -221,7 +221,10 @@ mod tests {
         let path = Path::new(temp_file.path());
 
         let value: Value = path.clone().into();
-        assert!(matches!(value, Value::String(Some(_))), "expected Value::String(Some(...)), got {value:?}");
+        assert!(
+            matches!(value, Value::String(Some(_))),
+            "expected Value::String(Some(...)), got {value:?}"
+        );
     }
 
     // -------------------------------------------------------------------
