@@ -29,6 +29,7 @@ anyhow = "1.0.102"
 async-trait = { version = "0.1.89", optional = true }
 filetime = "0.2.27"
 path-absolutize = "3.1.1"
+sea-orm = { version = "1.1.19", optional = true }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 tokio = { version = "1.50.0", features = ["fs", "rt", "io-util"], optional = true }
@@ -46,7 +47,13 @@ async-fs-ops = [
   "dep:tokio",
 ]
 
+sea-orm = ["dep:sea-orm"]
+
 ## Default and alias
 default = []
-all = ["async-fs-ops"]
+all = [
+  "async-fs-ops",
+  "sea-orm",
+]
+
 full = ["all"]

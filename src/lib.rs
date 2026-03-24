@@ -103,6 +103,8 @@
 mod async_fs_ops;
 mod core;
 mod div;
+#[cfg(feature = "sea-orm")]
+mod sea_orm;
 mod sync_fs_ops;
 mod traits;
 
