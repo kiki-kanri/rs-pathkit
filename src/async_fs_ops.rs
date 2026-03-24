@@ -246,8 +246,8 @@ impl AsyncFsOps for Path {
 mod tests {
     use serde::Deserialize;
     use tempfile::{
+        tempdir,
         NamedTempFile,
-        TempDir,
     };
     use tokio::fs as async_fs;
 
@@ -265,7 +265,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_exists_false() -> Result<()> {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = tempdir()?;
         let non_existent = temp_dir.path().join("non_existent_file.txt");
         let path = Path::new(&non_existent);
 
@@ -285,7 +285,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_is_file_false() -> Result<()> {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = tempdir()?;
         let dir_path = Path::new(temp_dir.path());
 
         assert!(!dir_path.is_file().await?);
@@ -295,7 +295,7 @@ mod tests {
     // Test is_dir
     #[tokio::test]
     async fn test_is_dir() -> Result<()> {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = tempdir()?;
         let dir_path = Path::new(temp_dir.path());
 
         assert!(dir_path.is_dir().await?);
@@ -315,7 +315,7 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn test_is_symlink() -> Result<()> {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = tempdir()?;
         let target = temp_dir.path().join("target.txt");
         async_fs::write(&target, "test").await?;
 
@@ -369,7 +369,7 @@ mod tests {
     // Test create_dir
     #[tokio::test]
     async fn test_create_dir() -> Result<()> {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = tempdir()?;
         let new_dir = temp_dir.path().join("new_dir");
         let dir_path = Path::new(&new_dir);
 
@@ -382,7 +382,7 @@ mod tests {
     // Test create_dir_all
     #[tokio::test]
     async fn test_create_dir_all() -> Result<()> {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = tempdir()?;
         let new_dir = temp_dir.path().join("parent/child/grandchild");
         let dir_path = Path::new(&new_dir);
 
@@ -395,7 +395,7 @@ mod tests {
     // Test remove_dir
     #[tokio::test]
     async fn test_remove_dir() -> Result<()> {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = tempdir()?;
         let new_dir = temp_dir.path().join("to_remove");
         async_fs::create_dir(&new_dir).await?;
         let dir_path = Path::new(&new_dir);
@@ -421,7 +421,7 @@ mod tests {
     // Test remove_dir_all
     #[tokio::test]
     async fn test_remove_dir_all() -> Result<()> {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = tempdir()?;
         let parent = temp_dir.path().join("parent");
         async_fs::create_dir(&parent).await?;
         async_fs::write(parent.join("file1.txt"), "content1").await?;
@@ -492,7 +492,7 @@ mod tests {
     // Test read_dir
     #[tokio::test]
     async fn test_read_dir() -> Result<()> {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = tempdir()?;
         async_fs::write(temp_dir.path().join("file1.txt"), "content1").await?;
         async_fs::write(temp_dir.path().join("file2.txt"), "content2").await?;
         async_fs::create_dir(temp_dir.path().join("subdir")).await?;
@@ -512,7 +512,7 @@ mod tests {
     // Test empty_dir
     #[tokio::test]
     async fn test_empty_dir() -> Result<()> {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = tempdir()?;
         async_fs::write(temp_dir.path().join("file1.txt"), "content1").await?;
         async_fs::write(temp_dir.path().join("file2.txt"), "content2").await?;
         async_fs::create_dir(temp_dir.path().join("subdir")).await?;

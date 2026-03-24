@@ -301,8 +301,8 @@ impl SyncFsOps for Path {
 mod tests {
     use serde::Deserialize;
     use tempfile::{
+        tempdir,
         NamedTempFile,
-        TempDir,
     };
 
     use super::*;
@@ -319,7 +319,7 @@ mod tests {
 
     #[test]
     fn test_exists_sync_false() -> Result<()> {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = tempdir()?;
         let non_existent = temp_dir.path().join("non_existent_file.txt");
         let path = Path::new(&non_existent);
 
@@ -339,7 +339,7 @@ mod tests {
 
     #[test]
     fn test_is_file_sync_false() -> Result<()> {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = tempdir()?;
         let dir_path = Path::new(temp_dir.path());
 
         assert!(!dir_path.is_file_sync()?);
@@ -349,7 +349,7 @@ mod tests {
     // Test is_dir_sync
     #[test]
     fn test_is_dir_sync() -> Result<()> {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = tempdir()?;
         let dir_path = Path::new(temp_dir.path());
 
         assert!(dir_path.is_dir_sync()?);
@@ -369,7 +369,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn test_is_symlink_sync() -> Result<()> {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = tempdir()?;
         let target = temp_dir.path().join("target.txt");
         fs::write(&target, "test")?;
 
@@ -424,7 +424,7 @@ mod tests {
     // Test create_dir_sync
     #[test]
     fn test_create_dir_sync() -> Result<()> {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = tempdir()?;
         let new_dir = temp_dir.path().join("new_dir");
         let dir_path = Path::new(&new_dir);
 
@@ -437,7 +437,7 @@ mod tests {
     // Test create_dir_all_sync
     #[test]
     fn test_create_dir_all_sync() -> Result<()> {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = tempdir()?;
         let new_dir = temp_dir.path().join("parent/child/grandchild");
         let dir_path = Path::new(&new_dir);
 
@@ -450,7 +450,7 @@ mod tests {
     // Test remove_dir_sync
     #[test]
     fn test_remove_dir_sync() -> Result<()> {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = tempdir()?;
         let new_dir = temp_dir.path().join("to_remove");
         fs::create_dir(&new_dir)?;
         let dir_path = Path::new(&new_dir);
@@ -476,7 +476,7 @@ mod tests {
     // Test remove_dir_all_sync
     #[test]
     fn test_remove_dir_all_sync() -> Result<()> {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = tempdir()?;
         let parent = temp_dir.path().join("parent");
         fs::create_dir(&parent)?;
         fs::write(parent.join("file1.txt"), "content1")?;
@@ -547,7 +547,7 @@ mod tests {
     // Test read_dir_sync
     #[test]
     fn test_read_dir_sync() -> Result<()> {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = tempdir()?;
         fs::write(temp_dir.path().join("file1.txt"), "content1")?;
         fs::write(temp_dir.path().join("file2.txt"), "content2")?;
         fs::create_dir(temp_dir.path().join("subdir"))?;
@@ -563,7 +563,7 @@ mod tests {
     // Test empty_dir_sync
     #[test]
     fn test_empty_dir_sync() -> Result<()> {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = tempdir()?;
         fs::write(temp_dir.path().join("file1.txt"), "content1")?;
         fs::write(temp_dir.path().join("file2.txt"), "content2")?;
         fs::create_dir(temp_dir.path().join("subdir"))?;
@@ -688,6 +688,194 @@ mod tests {
         // Unix socket files are tricky to create and test
         let path = Path::new("/tmp"); // This is not a socket
         assert!(!path.is_socket_sync()?);
+        Ok(())
+    }
+
+    // ----------------------------------------------------------------
+    // Tests for previously uncovered sync_fs_ops functions
+    // ----------------------------------------------------------------
+
+    #[test]
+    fn test_copy_file_sync() -> Result<()> {
+        let temp_src = NamedTempFile::new()?;
+        let temp_dst = NamedTempFile::new()?;
+        let src = Path::new(temp_src.path());
+        let dst = Path::new(temp_dst.path());
+
+        src.write_sync(b"hello world")?;
+
+        let bytes = src.copy_file_sync(&dst)?;
+        assert_eq!(bytes, 11);
+
+        let content = dst.read_sync()?;
+        assert_eq!(content, b"hello world");
+        Ok(())
+    }
+
+    #[test]
+    fn test_hard_link_sync() -> Result<()> {
+        let temp_file = NamedTempFile::new()?;
+        let src = Path::new(temp_file.path());
+        let link_path = Path::new(temp_file.path().with_extension("link"));
+
+        src.write_sync(b"link test")?;
+        src.hard_link_sync(&link_path)?;
+
+        // Both files should have same content
+        let content = fs::read(link_path.as_path())?;
+        assert_eq!(content, b"link test");
+
+        // And same inode (hard link)
+        let src_meta = fs::metadata(src.as_path())?;
+        let link_meta = fs::metadata(link_path.as_path())?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            assert_eq!(src_meta.ino(), link_meta.ino());
+        }
+        #[cfg(not(unix))]
+        let _ = (src_meta, link_meta);
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_soft_link_sync() -> Result<()> {
+        let temp_file = NamedTempFile::new()?;
+        let src = Path::new(temp_file.path());
+        let link_path = Path::new(temp_file.path().with_extension("sym"));
+
+        src.write_sync(b"symlink test")?;
+        src.soft_link_sync(&link_path)?;
+
+        // Read through symlink
+        let content = fs::read(link_path.as_path())?;
+        assert_eq!(content, b"symlink test");
+
+        // Verify link_path is a symlink
+        assert!(link_path.is_symlink_sync()?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_link_sync() -> Result<()> {
+        let temp_file = NamedTempFile::new()?;
+        let src = Path::new(temp_file.path());
+        let link_path = Path::new(temp_file.path().with_extension("readlink"));
+
+        src.write_sync(b"readlink test")?;
+        #[cfg(unix)]
+        src.soft_link_sync(&link_path)?;
+        #[cfg(not(unix))]
+        {
+            // On non-Unix, symlinks don't exist, so skip the core functionality
+            // but we can still test the read_link method exists and compiles
+        }
+
+        // If we have a symlink, test read_link_sync
+        #[cfg(unix)]
+        {
+            let link_target = link_path.read_link_sync()?;
+            assert_eq!(link_target.to_str(), src.to_str());
+        }
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_symlink_metadata_sync() -> Result<()> {
+        let temp_file = NamedTempFile::new()?;
+        let src = Path::new(temp_file.path());
+        let link_path = Path::new(temp_file.path().with_extension("meta"));
+
+        src.write_sync(b"meta test")?;
+        src.soft_link_sync(&link_path)?;
+
+        // symlink_metadata gets metadata of the link itself (not the target)
+        let meta = link_path.symlink_metadata_sync()?;
+        assert!(meta.file_type().is_symlink());
+        Ok(())
+    }
+
+    #[test]
+    fn test_touch_sync_creates_new_file() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let new_file = temp_dir.path().join("touched.txt");
+        let path = Path::new(&new_file);
+
+        assert!(!path.exists_sync()?);
+        path.touch_sync()?;
+        assert!(path.exists_sync()?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_touch_sync_updates_existing() -> Result<()> {
+        let temp_file = NamedTempFile::new()?;
+        let path = Path::new(temp_file.path());
+
+        // Record original mtime
+        let meta_before = fs::metadata(temp_file.path())?;
+        let mtime_before = meta_before.modified()?;
+
+        // Wait a bit so mtime actually changes
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        path.touch_sync()?;
+
+        let meta_after = fs::metadata(temp_file.path())?;
+        let mtime_after = meta_after.modified()?;
+        assert!(mtime_after > mtime_before);
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_dir_names_sync() -> Result<()> {
+        let temp_dir = tempdir()?;
+        fs::write(temp_dir.path().join("a.txt"), "")?;
+        fs::write(temp_dir.path().join("b.txt"), "")?;
+        fs::create_dir(temp_dir.path().join("subdir"))?;
+
+        let dir = Path::new(temp_dir.path());
+        let names = dir.read_dir_names_sync()?;
+        assert_eq!(names.len(), 3);
+        assert!(names.contains(&String::from("a.txt")));
+        assert!(names.contains(&String::from("b.txt")));
+        assert!(names.contains(&String::from("subdir")));
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_dir_paths_sync() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let file_a = temp_dir.path().join("file_a.txt");
+        let file_b = temp_dir.path().join("file_b.txt");
+        fs::write(&file_a, "")?;
+        fs::write(&file_b, "")?;
+
+        let dir = Path::new(temp_dir.path());
+        let paths = dir.read_dir_paths_sync()?;
+        assert_eq!(paths.len(), 2);
+        // All returned paths should be absolute
+        for p in &paths {
+            assert!(p.is_absolute());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_empty_dir_sync_creates_dir_if_missing() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let new_dir = temp_dir.path().join("brand_new_dir");
+        let path = Path::new(&new_dir);
+
+        // Directory doesn't exist
+        assert!(!path.exists_sync()?);
+
+        // empty_dir_sync should create it (via create_dir_all_sync)
+        path.empty_dir_sync()?;
+
+        assert!(path.is_dir_sync()?);
         Ok(())
     }
 }
