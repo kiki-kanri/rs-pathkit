@@ -34,19 +34,57 @@ impl Div<Path> for Path {
     }
 }
 
-impl<T: AsRef<str>> Div<T> for &Path {
+/// Division via `&str` — enabled by `AsRef<str>` on `Path`.
+impl Div<&str> for &Path {
     type Output = Path;
 
-    fn div(self, rhs: T) -> Self::Output {
-        self.join(rhs.as_ref())
+    fn div(self, rhs: &str) -> Self::Output {
+        self.join(rhs)
     }
 }
 
-impl<T: AsRef<str>> Div<T> for Path {
+/// Division via `&String` — `&String` coerces to `&str` via Deref.
+impl Div<&String> for &Path {
     type Output = Path;
 
-    fn div(self, rhs: T) -> Self::Output {
-        self.join(rhs.as_ref())
+    fn div(self, rhs: &String) -> Self::Output {
+        self.join(rhs.as_str())
+    }
+}
+
+/// Division via `String` — enabled by `AsRef<str>` on `Path`.
+impl Div<String> for &Path {
+    type Output = Path;
+
+    fn div(self, rhs: String) -> Self::Output {
+        self.join(rhs.as_str())
+    }
+}
+
+/// Division via `&str` — enabled by `AsRef<str>` on `Path`.
+impl Div<&str> for Path {
+    type Output = Path;
+
+    fn div(self, rhs: &str) -> Self::Output {
+        self.join(rhs)
+    }
+}
+
+/// Division via `&String` — `&String` coerces to `&str` via Deref.
+impl Div<&String> for Path {
+    type Output = Path;
+
+    fn div(self, rhs: &String) -> Self::Output {
+        self.join(rhs.as_str())
+    }
+}
+
+/// Division via `String` — enabled by `AsRef<str>` on `Path`.
+impl Div<String> for Path {
+    type Output = Path;
+
+    fn div(self, rhs: String) -> Self::Output {
+        self.join(rhs.as_str())
     }
 }
 

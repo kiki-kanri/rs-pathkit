@@ -1,5 +1,6 @@
 use std::{
     borrow::Borrow,
+    ffi::OsStr,
     fmt::{
         Display,
         Formatter,
@@ -46,6 +47,102 @@ impl From<&StdPath> for Path {
     }
 }
 
+impl From<&str> for Path {
+    fn from(path: &str) -> Self {
+        Self(PathBuf::from(path))
+    }
+}
+
+impl AsRef<OsStr> for Path {
+    fn as_ref(&self) -> &OsStr {
+        self.0.as_os_str()
+    }
+}
+
+/// Converts a `String` into a `Path`.
+///
+/// This allows `String` to be used wherever a `Path` is expected,
+/// such as in the `Path::new()` constructor or path joining operations.
+///
+/// # Example
+///
+/// ```rust
+/// use pathkit::Path;
+///
+/// let path = Path::new("test/path");
+/// let from_string: Path = Path::from(String::from("test/path"));
+/// assert_eq!(from_string.to_str(), Some("test/path"));
+/// ```
+impl From<String> for Path {
+    fn from(path: String) -> Self {
+        Self(PathBuf::from(path))
+    }
+}
+
+/// Converts a `Path` into a `String`.
+///
+/// This conversion lossy — it returns the path's UTF-8 representation
+/// as a `String`. If the path contains invalid Unicode, non-decodable
+/// bytes are replaced with the Unicode replacement character (U+FFFD).
+///
+/// # Example
+///
+/// ```rust
+/// use pathkit::Path;
+///
+/// let path = Path::new("/test/path");
+/// let s: String = String::from(path);
+/// assert_eq!(s, "/test/path");
+/// ```
+impl From<Path> for String {
+    fn from(path: Path) -> Self {
+        path.to_string_lossy().into_owned()
+    }
+}
+
+/// Allows a `Path` to be used as a `&str` via `AsRef<str>`.
+///
+/// This is useful for APIs that expect `impl AsRef<str>` rather than
+/// `impl AsRef<Path>`.
+///
+/// # Example
+///
+/// ```rust
+/// use pathkit::Path;
+///
+/// let path = Path::new("/test/path");
+/// let s: &str = path.as_ref();
+/// assert_eq!(s, "/test/path");
+/// ```
+impl AsRef<str> for Path {
+    fn as_ref(&self) -> &str {
+        // to_string_lossy() always returns Some because we don't check for lossy conversion
+        // The unwrap is safe: to_string_lossy() never panics, only returns Owned
+        self.to_str().unwrap()
+    }
+}
+
+/// Allows a `Path` to be used as a `PathBuf` via `AsRef<PathBuf>`.
+///
+/// This is useful for APIs that accept `impl AsRef<PathBuf>`, such as
+/// `copy_file_sync`, `hard_link_sync`, and `soft_link_sync`.
+///
+/// # Example
+///
+/// ```rust
+/// use pathkit::Path;
+/// use std::path::PathBuf;
+///
+/// let path = Path::new("/test/path");
+/// let buf: &PathBuf = path.as_ref();
+/// assert_eq!(*buf, PathBuf::from("/test/path"));
+/// ```
+impl AsRef<PathBuf> for Path {
+    fn as_ref(&self) -> &PathBuf {
+        &self.0
+    }
+}
+
 impl From<Path> for PathBuf {
     fn from(path: Path) -> Self {
         path.0
@@ -56,6 +153,7 @@ impl From<Path> for PathBuf {
 mod tests {
     use std::{
         borrow::Borrow,
+        ffi::OsStr,
         ops::Deref,
         path::{
             Path as StdPath,
@@ -78,7 +176,7 @@ mod tests {
     fn test_as_ref_self() {
         let path = Path::new("/test/path");
         // as_ref returns &StdPath through Deref
-        let path_ref = path.as_ref();
+        let path_ref: &StdPath = path.as_ref();
         assert_eq!(path_ref, StdPath::new("/test/path"));
     }
 
@@ -260,6 +358,45 @@ mod tests {
         let path = Path::new("/test/path");
         let os_str = path.as_os_str();
         assert_eq!(os_str, std::ffi::OsStr::new("/test/path"));
+    }
+
+    // Test AsRef<OsStr>
+    #[test]
+    fn test_as_ref_os_str() {
+        let path = Path::new("/test/path");
+        let os_str: &OsStr = path.as_ref();
+        assert_eq!(os_str, OsStr::new("/test/path"));
+    }
+
+    // Test From<&str> for Path
+    #[test]
+    fn test_from_str() {
+        let path: Path = Path::from("/test/path");
+        assert_eq!(path.to_str(), Some("/test/path"));
+    }
+
+    // Test From<String> for Path
+    #[test]
+    fn test_from_string() {
+        let s = String::from("/test/path");
+        let path: Path = Path::from(s);
+        assert_eq!(path.to_str(), Some("/test/path"));
+    }
+
+    // Test From<Path> for String
+    #[test]
+    fn test_to_string() {
+        let path = Path::new("/test/path");
+        let s: String = String::from(path);
+        assert_eq!(s, "/test/path");
+    }
+
+    // Test AsRef<str>
+    #[test]
+    fn test_as_ref_str() {
+        let path = Path::new("/test/path");
+        let s: &str = path.as_ref();
+        assert_eq!(s, "/test/path");
     }
 
     // Test that path has content (skip is_empty - it's unstable)
