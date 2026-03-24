@@ -48,9 +48,9 @@ use crate::Path;
 // Into<Value> — allows ActiveValue::Set(Path(...)) and query parameters
 // ---------------------------------------------------------------------------
 
-impl Into<Value> for Path {
-    fn into(self) -> Value {
-        Value::String(Some(Box::new(self.to_string_lossy().into_owned())))
+impl From<Path> for Value {
+    fn from(val: Path) -> Self {
+        Value::String(Some(Box::new(val.to_string_lossy().into_owned())))
     }
 }
 
