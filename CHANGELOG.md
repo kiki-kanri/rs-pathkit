@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.1.0
+
+[compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v1.0.0...v1.1.0)
+
+### 🚀 Enhancements
+
+- Add `copy_file` method to async fs ops and change all as ref PathBuf args to as ref Path ([6460484](https://github.com/kiki-kanri/rs-pathkit/commit/6460484))
+
+### 📖 Documentation
+
+- Update and add AGENTS.md ([1bb225c](https://github.com/kiki-kanri/rs-pathkit/commit/1bb225c))
+
+### 🏡 Chore
+
+- Update deps ([7816d9f](https://github.com/kiki-kanri/rs-pathkit/commit/7816d9f))
+
+### ❤️ Contributors
+
+- Kiki-kanri
+
 ## v1.0.0
 
 [compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v0.9.7...v1.0.0)
