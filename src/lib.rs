@@ -7,7 +7,8 @@
 //!
 //! - **Path Operations**: Extended path manipulation methods beyond `std::path::Path`
 //! - **Synchronous I/O**: Blocking file system operations via [`SyncFsOps`] trait
-//! - **Asynchronous I/O**: Non-blocking file system operations via [`AsyncFsOps`] trait
+//! - **Asynchronous I/O**: Non-blocking file system operations via `AsyncFsOps` trait (requires `async-fs-ops` feature)
+//! - **SeaORM Integration**: Use `Path` as a model field (requires `sea-orm` feature)
 //! - **Serde Support**: Serialize and deserialize Path with `#[derive(Serialize, Deserialize)]`
 //! - **Path Joining**: Use `/` operator for intuitive path composition
 //!
@@ -23,6 +24,12 @@
 //!
 //! ```bash
 //! cargo add pathkit --features async-fs-ops
+//! ```
+//!
+//! For SeaORM support:
+//!
+//! ```bash
+//! cargo add pathkit --features sea-orm
 //! ```
 //!
 //! ## Usage
@@ -87,11 +94,27 @@
 //! Path::new("/tmp/new_project").create_dir_all().await?;
 //! ```
 //!
+//! ### SeaORM Integration
+//!
+//! ```rust,ignore
+//! use sea_orm::entity::prelude::*;
+//! use pathkit::Path;
+//!
+//! #[derive(Clone, Debug, DeriveEntityModel)]
+//! #[sea_orm(table_name = "files")]
+//! struct Model {
+//!     #[sea_orm(primary_key)]
+//!     id: i32,
+//!     path: Path,
+//! }
+//! ```
+//!
 //! ## Feature Flags
 //!
 //! | Feature | Description |
 //! |---------|-------------|
 //! | `async-fs-ops` | Enable async file system operations (requires tokio) |
+//! | `sea-orm` | Enable SeaORM integration for using `Path` as a model field |
 //! | `full` | Enable all features |
 //!
 //! ## Platform Support

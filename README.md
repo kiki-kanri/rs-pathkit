@@ -91,11 +91,37 @@ let content = path.read().await?;
 Path::new("/tmp/new_project").create_dir_all().await?;
 ```
 
+### SeaORM Integration (with `sea-orm` feature)
+
+When the `sea-orm` feature is enabled, `Path` can be used directly as a field type in SeaORM models:
+
+```rust
+use sea_orm::entity::prelude::*;
+use pathkit::Path;
+
+#[derive(Clone, Debug, DeriveEntityModel)]
+#[sea_orm(table_name = "files")]
+struct Model {
+    #[sea_orm(primary_key)]
+    id: i32,
+    path: Path,
+}
+```
+
+The following traits are implemented for SeaORM integration:
+- `Into<Value>` — enables `ActiveValue::Set(Path(...))` and query parameters
+- `ValueType` — describes the column type to the schema machinery
+- `Nullable` — enables `Option<Path>` in models
+- `TryGetable` — enables reading `Path` from query results
+
+`Path` is stored as `String` in the database.
+
 ## Feature Flags
 
 | Feature | Description |
 |---------|-------------|
 | `async-fs-ops` | Enable async file system operations (requires tokio) |
+| `sea-orm` | Enable SeaORM integration for using `Path` as a model field |
 | `full` | Enable all features |
 
 ## Platform Support
@@ -121,8 +147,8 @@ Path::new("/tmp/new_project").create_dir_all().await?;
 - `set_permissions_sync()`, `read_dir_sync()`, `read_dir_names_sync()`, `read_dir_paths_sync()`, `empty_dir_sync()`
 - `chmod_sync()`, `chown_sync()` (Unix only)
 - `is_block_device_sync()`, `is_char_device_sync()`, `is_fifo_sync()`, `is_socket_sync()` (Unix only)
-- `copy_file_sync()`, `hard_link_sync()`, `soft_link_sync()` (Unix only)
-- `read_link_sync()`, `symlink_metadata_sync()` (Unix only)
+- `copy_file_sync()`, `hard_link_sync()`, `soft_link_sync()`
+- `read_link_sync()`, `symlink_metadata_sync()`
 - `touch_sync()`
 
 ### Trait Implementations
@@ -132,7 +158,7 @@ Path::new("/tmp/new_project").create_dir_all().await?;
 - `Deref<Target = Path>` — transparent access to `std::path::Path` methods
 - `Display` / `Debug` / `Serialize` / `Deserialize` — string-like and serde support
 - `From<&str>` / `From<&Path>` / `From<String>` / `From<Path> for String` — seamless conversions
-- `Div<&str>` / `Div<String>` / `Div<&Path>` / `Div<Path>` — use `/` operator: `path / "subdir"`
+- `Div<&str>` / `Div<String>` / `Div<&String>` / `Div<&Path>` / `Div<Path>` — use `/` operator: `path / "subdir"`
 
 ### File System Operations (AsyncFsOps)
 Same operations as SyncFsOps but async:
