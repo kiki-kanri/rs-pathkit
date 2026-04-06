@@ -67,6 +67,7 @@ pub trait AsyncFsOps {
     async fn chmod(&self, mode: u32) -> Result<()>;
     #[cfg(unix)]
     async fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> Result<()>;
+    async fn copy_file(&self, dest: impl AsRef<Path> + Send) -> Result<u64>;
     async fn create_dir_all(&self) -> Result<()>;
     async fn create_dir(&self) -> Result<()>;
     async fn empty_dir(&self) -> Result<()>;
@@ -112,6 +113,10 @@ impl AsyncFsOps for Path {
 
         let path = self.clone();
         Ok(spawn_blocking(move || std::os::unix::fs::chown(path, uid, gid)).await??)
+    }
+
+    async fn copy_file(&self, dest: impl AsRef<Path> + Send) -> Result<u64> {
+        Ok(fs::copy(self, dest.as_ref()).await?)
     }
 
     async fn create_dir(&self) -> Result<()> {
@@ -656,6 +661,24 @@ mod tests {
         // Just test that non-socket returns false
         let path = Path::new("/tmp"); // This is not a socket
         assert!(!path.is_socket().await?);
+        Ok(())
+    }
+
+    // Test copy_file
+    #[tokio::test]
+    async fn test_copy_file() -> Result<()> {
+        let temp_src = NamedTempFile::new()?;
+        let temp_dst = NamedTempFile::new()?;
+        let src = Path::new(temp_src.path());
+        let dst = Path::new(temp_dst.path());
+
+        src.write(b"hello world").await?;
+
+        let bytes = src.copy_file(&dst).await?;
+        assert_eq!(bytes, 11);
+
+        let content = dst.read().await?;
+        assert_eq!(content, b"hello world");
         Ok(())
     }
 }

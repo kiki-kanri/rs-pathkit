@@ -149,6 +149,12 @@ impl From<Path> for PathBuf {
     }
 }
 
+impl AsRef<Path> for Path {
+    fn as_ref(&self) -> &Path {
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{

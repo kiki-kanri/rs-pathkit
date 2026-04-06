@@ -22,7 +22,6 @@ use std::{
         Permissions,
         ReadDir,
     },
-    path::PathBuf,
     time::SystemTime,
 };
 
@@ -71,13 +70,13 @@ pub trait SyncFsOps {
     fn chmod_sync(&self, mode: u32) -> Result<()>;
     #[cfg(unix)]
     fn chown_sync(&self, uid: Option<u32>, gid: Option<u32>) -> Result<()>;
-    fn copy_file_sync(&self, dest: impl AsRef<PathBuf>) -> Result<u64>;
+    fn copy_file_sync(&self, dest: impl AsRef<Path>) -> Result<u64>;
     fn create_dir_all_sync(&self) -> Result<()>;
     fn create_dir_sync(&self) -> Result<()>;
     fn empty_dir_sync(&self) -> Result<()>;
     fn exists_sync(&self) -> Result<bool>;
     fn get_file_size_sync(&self) -> Result<u64>;
-    fn hard_link_sync(&self, link: impl AsRef<PathBuf>) -> Result<()>;
+    fn hard_link_sync(&self, link: impl AsRef<Path>) -> Result<()>;
     #[cfg(unix)]
     fn is_block_device_sync(&self) -> Result<bool>;
     #[cfg(unix)]
@@ -102,7 +101,7 @@ pub trait SyncFsOps {
     fn remove_file_sync(&self) -> Result<()>;
     fn set_permissions_sync(&self, permissions: Permissions) -> Result<()>;
     #[cfg(unix)]
-    fn soft_link_sync(&self, link: impl AsRef<PathBuf>) -> Result<()>;
+    fn soft_link_sync(&self, link: impl AsRef<Path>) -> Result<()>;
     fn symlink_metadata_sync(&self) -> Result<Metadata>;
     fn touch_sync(&self) -> Result<()>;
     fn truncate_sync(&self, len: Option<u64>) -> Result<()>;
@@ -123,7 +122,7 @@ impl SyncFsOps for Path {
         Ok(std::os::unix::fs::chown(self, uid, gid)?)
     }
 
-    fn copy_file_sync(&self, dest: impl AsRef<PathBuf>) -> Result<u64> {
+    fn copy_file_sync(&self, dest: impl AsRef<Path>) -> Result<u64> {
         Ok(fs::copy(self, dest.as_ref())?)
     }
 
@@ -160,7 +159,7 @@ impl SyncFsOps for Path {
         Ok(self.metadata_sync()?.len())
     }
 
-    fn hard_link_sync(&self, link: impl AsRef<PathBuf>) -> Result<()> {
+    fn hard_link_sync(&self, link: impl AsRef<Path>) -> Result<()> {
         Ok(fs::hard_link(self, link.as_ref())?)
     }
 
@@ -263,7 +262,7 @@ impl SyncFsOps for Path {
     }
 
     #[cfg(unix)]
-    fn soft_link_sync(&self, link: impl AsRef<PathBuf>) -> Result<()> {
+    fn soft_link_sync(&self, link: impl AsRef<Path>) -> Result<()> {
         use std::os::unix::fs::symlink;
 
         Ok(symlink(self, link.as_ref())?)
