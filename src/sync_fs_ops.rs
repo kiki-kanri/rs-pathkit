@@ -93,6 +93,7 @@ pub trait SyncFsOps {
     fn read_dir_paths_sync(&self) -> Result<Vec<Path>>;
     fn read_dir_sync(&self) -> Result<ReadDir>;
     fn read_json_sync<T: DeserializeOwned>(&self) -> Result<T>;
+    #[cfg(unix)]
     fn read_link_sync(&self) -> Result<Path>;
     fn read_sync(&self) -> Result<Vec<u8>>;
     fn read_to_string_sync(&self) -> Result<String>;
@@ -233,6 +234,7 @@ impl SyncFsOps for Path {
         Ok(from_slice::<T>(&self.read_sync()?)?)
     }
 
+    #[cfg(unix)]
     fn read_link_sync(&self) -> Result<Path> {
         Ok(Self::new(fs::read_link(self)?))
     }
@@ -756,6 +758,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_read_link_sync() -> Result<()> {
         let temp_file = NamedTempFile::new()?;
@@ -763,20 +766,11 @@ mod tests {
         let link_path = Path::new(temp_file.path().with_extension("readlink"));
 
         src.write_sync(b"readlink test")?;
-        #[cfg(unix)]
         src.soft_link_sync(&link_path)?;
-        #[cfg(not(unix))]
-        {
-            // On non-Unix, symlinks don't exist, so skip the core functionality
-            // but we can still test the read_link method exists and compiles
-        }
 
-        // If we have a symlink, test read_link_sync
-        #[cfg(unix)]
-        {
-            let link_target = link_path.read_link_sync()?;
-            assert_eq!(link_target.to_str(), src.to_str());
-        }
+        let link_target = link_path.read_link_sync()?;
+        assert_eq!(link_target.to_str(), src.to_str());
+
         Ok(())
     }
 
