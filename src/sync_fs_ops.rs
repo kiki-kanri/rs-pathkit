@@ -73,6 +73,8 @@ pub trait SyncFsOps {
     fn copy_file_sync(&self, dest: impl AsRef<Path>) -> Result<u64>;
     fn create_dir_all_sync(&self) -> Result<()>;
     fn create_dir_sync(&self) -> Result<()>;
+    fn create_parent_dir_all_sync(&self) -> Result<bool>;
+    fn create_parent_dir_sync(&self) -> Result<bool>;
     fn empty_dir_sync(&self) -> Result<()>;
     fn exists_sync(&self) -> Result<bool>;
     fn get_file_size_sync(&self) -> Result<u64>;
@@ -133,6 +135,24 @@ impl SyncFsOps for Path {
 
     fn create_dir_sync(&self) -> Result<()> {
         Ok(fs::create_dir(self)?)
+    }
+
+    fn create_parent_dir_all_sync(&self) -> Result<bool> {
+        if let Some(parent) = self.parent() {
+            parent.create_dir_all_sync()?;
+            return Ok(true);
+        }
+
+        return Ok(false);
+    }
+
+    fn create_parent_dir_sync(&self) -> Result<bool> {
+        if let Some(parent) = self.parent() {
+            parent.create_dir_sync()?;
+            return Ok(true);
+        }
+
+        return Ok(false);
     }
 
     fn empty_dir_sync(&self) -> Result<()> {

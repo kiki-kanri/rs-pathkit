@@ -70,6 +70,8 @@ pub trait AsyncFsOps {
     async fn copy_file(&self, dest: impl AsRef<Path> + Send) -> Result<u64>;
     async fn create_dir_all(&self) -> Result<()>;
     async fn create_dir(&self) -> Result<()>;
+    async fn create_parent_dir_all(&self) -> Result<bool>;
+    async fn create_parent_dir(&self) -> Result<bool>;
     async fn empty_dir(&self) -> Result<()>;
     async fn exists(&self) -> Result<bool>;
     async fn get_file_size(&self) -> Result<u64>;
@@ -125,6 +127,24 @@ impl AsyncFsOps for Path {
 
     async fn create_dir_all(&self) -> Result<()> {
         Ok(fs::create_dir_all(self).await?)
+    }
+
+    async fn create_parent_dir_all(&self) -> Result<bool> {
+        if let Some(parent) = self.parent() {
+            parent.create_dir_all().await?;
+            return Ok(true);
+        }
+
+        return Ok(false);
+    }
+
+    async fn create_parent_dir(&self) -> Result<bool> {
+        if let Some(parent) = self.parent() {
+            parent.create_dir().await?;
+            return Ok(true);
+        }
+
+        return Ok(false);
     }
 
     async fn empty_dir(&self) -> Result<()> {
