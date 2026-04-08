@@ -135,7 +135,7 @@ impl AsyncFsOps for Path {
             return Ok(true);
         }
 
-        return Ok(false);
+        Ok(false)
     }
 
     async fn create_parent_dir(&self) -> Result<bool> {
@@ -144,7 +144,7 @@ impl AsyncFsOps for Path {
             return Ok(true);
         }
 
-        return Ok(false);
+        Ok(false)
     }
 
     async fn empty_dir(&self) -> Result<()> {

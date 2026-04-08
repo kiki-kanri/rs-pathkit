@@ -143,7 +143,7 @@ impl SyncFsOps for Path {
             return Ok(true);
         }
 
-        return Ok(false);
+        Ok(false)
     }
 
     fn create_parent_dir_sync(&self) -> Result<bool> {
@@ -152,7 +152,7 @@ impl SyncFsOps for Path {
             return Ok(true);
         }
 
-        return Ok(false);
+        Ok(false)
     }
 
     fn empty_dir_sync(&self) -> Result<()> {
