@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.2.0
+
+[compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v1.1.0...v1.2.0)
+
+### 🚀 Enhancements
+
+- Add methods ([45af3c0](https://github.com/kiki-kanri/rs-pathkit/commit/45af3c0))
+
+### 🏡 Chore
+
+- Make `read_link_sync` only unix can use ([60c5f63](https://github.com/kiki-kanri/rs-pathkit/commit/60c5f63))
+- Lint code ([d2916d9](https://github.com/kiki-kanri/rs-pathkit/commit/d2916d9))
+
+### ❤️ Contributors
+
+- Kiki-kanri
+
 ## v1.1.0
 
 [compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v1.0.0...v1.1.0)
