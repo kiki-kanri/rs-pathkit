@@ -99,4 +99,21 @@ mod tests {
 
         Ok(())
     }
+
+    #[tokio::test]
+    async fn async_path_entry_exposes_raw_dir_entry_interop() -> Result<()> {
+        let dir = tempdir()?;
+        let file_path = dir.path().join("async-raw.txt");
+        write(&file_path, b"content").await?;
+
+        let mut entries = read_dir(dir.path()).await?;
+        let entry = entries.next_entry().await?.unwrap();
+        let path_entry = AsyncPathEntry::from(entry);
+        assert_eq!(path_entry.as_dir_entry().path(), file_path);
+
+        let entry = path_entry.into_dir_entry();
+        assert_eq!(entry.path(), file_path);
+
+        Ok(())
+    }
 }

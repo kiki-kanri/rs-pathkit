@@ -100,4 +100,20 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn path_entry_exposes_raw_dir_entry_interop() -> Result<()> {
+        let dir = tempdir()?;
+        let file_path = dir.path().join("raw.txt");
+        write(&file_path, b"content")?;
+
+        let entry = read_dir(dir.path())?.next().unwrap()?;
+        let path_entry = PathEntry::from(entry);
+        assert_eq!(path_entry.as_dir_entry().path(), file_path);
+
+        let entry = path_entry.into_dir_entry();
+        assert_eq!(entry.path(), file_path);
+
+        Ok(())
+    }
 }

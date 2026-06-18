@@ -371,6 +371,14 @@ mod tests {
         assert_eq!(path.as_path(), pathbuf.as_path());
     }
 
+    #[test]
+    fn test_as_ref_pathbuf() {
+        let path = Path::new("/test/path");
+        let pathbuf: &PathBuf = path.as_ref();
+
+        assert_eq!(pathbuf, &PathBuf::from("/test/path"));
+    }
+
     // Test as_os_str
     #[test]
     fn test_as_os_str() {

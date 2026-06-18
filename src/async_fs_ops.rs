@@ -625,6 +625,38 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn test_create_parent_dir() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let file = Path::new(temp_dir.path().join("parent").join("file.txt"));
+
+        assert!(file.create_parent_dir().await?);
+        assert!(file.parent().unwrap().is_dir().await?);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_create_parent_dir_all() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let file = Path::new(temp_dir.path().join("nested").join("parent").join("file.txt"));
+
+        assert!(file.create_parent_dir_all().await?);
+        assert!(file.parent().unwrap().is_dir().await?);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_create_parent_dir_without_parent_returns_false() -> Result<()> {
+        let path = Path::new("");
+
+        assert!(!path.create_parent_dir().await?);
+        assert!(!path.create_parent_dir_all().await?);
+
+        Ok(())
+    }
+
     // Test empty_dir
     #[tokio::test]
     async fn test_empty_dir() -> Result<()> {

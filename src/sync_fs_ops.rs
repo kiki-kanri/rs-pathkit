@@ -890,6 +890,60 @@ mod tests {
     }
 
     #[test]
+    fn test_read_dir_entries_sync() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let file_a = temp_dir.path().join("entry_a.txt");
+        let file_b = temp_dir.path().join("entry_b.txt");
+        fs::write(&file_a, "")?;
+        fs::write(&file_b, "")?;
+
+        let dir = Path::new(temp_dir.path());
+        let entries = dir.read_dir_entries_sync()?;
+        assert_eq!(entries.len(), 2);
+
+        let names: Vec<_> = entries
+            .iter()
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
+            .collect();
+        assert!(names.contains(&String::from("entry_a.txt")));
+        assert!(names.contains(&String::from("entry_b.txt")));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_parent_dir_sync() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let file = Path::new(temp_dir.path().join("parent").join("file.txt"));
+
+        assert!(file.create_parent_dir_sync()?);
+        assert!(file.parent().unwrap().is_dir_sync()?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_parent_dir_all_sync() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let file = Path::new(temp_dir.path().join("nested").join("parent").join("file.txt"));
+
+        assert!(file.create_parent_dir_all_sync()?);
+        assert!(file.parent().unwrap().is_dir_sync()?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_parent_dir_sync_without_parent_returns_false() -> Result<()> {
+        let path = Path::new("");
+
+        assert!(!path.create_parent_dir_sync()?);
+        assert!(!path.create_parent_dir_all_sync()?);
+
+        Ok(())
+    }
+
+    #[test]
     fn test_empty_dir_sync_creates_dir_if_missing() -> Result<()> {
         let temp_dir = tempdir()?;
         let new_dir = temp_dir.path().join("brand_new_dir");
