@@ -1,5 +1,60 @@
 # Changelog
 
+## v1.3.0
+
+[compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v1.2.0...v1.3.0)
+
+### 🚀 Enhancements
+
+- **macros:** Add path formatting macro ([75a4642](https://github.com/kiki-kanri/rs-pathkit/commit/75a4642))
+- **core:** Expand path fluent conversions ([fd757ee](https://github.com/kiki-kanri/rs-pathkit/commit/fd757ee))
+- **fs:** Add pathkit directory entry wrappers ([e9812c4](https://github.com/kiki-kanri/rs-pathkit/commit/e9812c4))
+
+### 🔥 Performance
+
+- **core:** Inline lightweight path helpers ([a60fe53](https://github.com/kiki-kanri/rs-pathkit/commit/a60fe53))
+
+### 🩹 Fixes
+
+- **scripts:** Preserve entrypoint log prefixes ([b48c56c](https://github.com/kiki-kanri/rs-pathkit/commit/b48c56c))
+
+### 🏡 Chore
+
+- Update release script ([ea640cc](https://github.com/kiki-kanri/rs-pathkit/commit/ea640cc))
+- Update cargo config ([330e4ed](https://github.com/kiki-kanri/rs-pathkit/commit/330e4ed))
+- Set build rustflags and release profile configs ([35839b5](https://github.com/kiki-kanri/rs-pathkit/commit/35839b5))
+- Add fmt script and update release script ([a956ad0](https://github.com/kiki-kanri/rs-pathkit/commit/a956ad0))
+- Add `rust-toolchain.toml` to use nightly version and update vscode settings ([6b261ba](https://github.com/kiki-kanri/rs-pathkit/commit/6b261ba))
+- Configure profile-specific `rustflags` in `cargo.toml` for dev and release ([0624e2f](https://github.com/kiki-kanri/rs-pathkit/commit/0624e2f))
+- Remove fmt script and update cargo alias ([2a9ad8c](https://github.com/kiki-kanri/rs-pathkit/commit/2a9ad8c))
+- Update `.cargo/config.toml`, add multi-platform example rustflags ([6d0c420](https://github.com/kiki-kanri/rs-pathkit/commit/6d0c420))
+- Add `.gitattributes` ([a7d2a67](https://github.com/kiki-kanri/rs-pathkit/commit/a7d2a67))
+- Update cargo config, add build release scripts and bump toolchain channel to 260515 ([510c6cf](https://github.com/kiki-kanri/rs-pathkit/commit/510c6cf))
+- Update scripts and configs ([fc8d7bb](https://github.com/kiki-kanri/rs-pathkit/commit/fc8d7bb))
+- Update release build scripts ([a2812b6](https://github.com/kiki-kanri/rs-pathkit/commit/a2812b6))
+- Update rust toolchain nightly date to 26-06-01 ([7858ac2](https://github.com/kiki-kanri/rs-pathkit/commit/7858ac2))
+- Add `.omx/` to `.gitignore` ([3f01e6d](https://github.com/kiki-kanri/rs-pathkit/commit/3f01e6d))
+- Add `upgrade-dependencies.sh` script ([7ab5176](https://github.com/kiki-kanri/rs-pathkit/commit/7ab5176))
+- Update `upgrade-dependencies.sh` script ([d7d3e79](https://github.com/kiki-kanri/rs-pathkit/commit/d7d3e79))
+- Update `upgrade-dependencies.sh` script ([f1a2a24](https://github.com/kiki-kanri/rs-pathkit/commit/f1a2a24))
+- Update scripts ([85d43bd](https://github.com/kiki-kanri/rs-pathkit/commit/85d43bd))
+- Upgrade deps ([44ff58a](https://github.com/kiki-kanri/rs-pathkit/commit/44ff58a))
+- Remove old `AGENTS.md` ([e78d423](https://github.com/kiki-kanri/rs-pathkit/commit/e78d423))
+
+### ✅ Tests
+
+- **fs:** Cover directory entry helpers ([935070d](https://github.com/kiki-kanri/rs-pathkit/commit/935070d))
+
+### 🤖 CI
+
+- Rename `release-test-codecov.yaml` to `continuous-verification.yaml` ([d262250](https://github.com/kiki-kanri/rs-pathkit/commit/d262250))
+- Update `codecov/codecov-action` version to v6 ([9c3e6aa](https://github.com/kiki-kanri/rs-pathkit/commit/9c3e6aa))
+- Update `continuous-verification` workflow ([752c1fd](https://github.com/kiki-kanri/rs-pathkit/commit/752c1fd))
+
+### ❤️ Contributors
+
+- Kiki-kanri
+
 ## v1.2.0
 
 [compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v1.1.0...v1.2.0)
