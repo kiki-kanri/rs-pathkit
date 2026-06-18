@@ -11,6 +11,7 @@
 //! - **SeaORM Integration**: Use `Path` as a model field (requires `sea-orm` feature)
 //! - **Serde Support**: Serialize and deserialize Path with `#[derive(Serialize, Deserialize)]`
 //! - **Path Joining**: Use `/` operator for intuitive path composition
+//! - **Path Macro**: Use [`path!`] for `format!`-style `Path` construction
 //!
 //! ## Installation
 //!
@@ -47,6 +48,10 @@
 //!
 //! // Using / operator (note: this consumes the path)
 //! let nested = Path::new("/home/user") / "project" / "subdir";
+//!
+//! // Use path! for format-style construction
+//! let user = "user";
+//! let config = pathkit::path!("/home/{user}/{}", "config.json");
 //!
 //! // Get path components
 //! let parent = path.parent();
@@ -126,6 +131,7 @@
 mod async_fs_ops;
 mod core;
 mod div;
+mod macros;
 #[cfg(feature = "sea-orm")]
 mod sea_orm;
 mod sync_fs_ops;

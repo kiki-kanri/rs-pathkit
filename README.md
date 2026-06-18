@@ -16,6 +16,7 @@ A Rust library that provides a `Path` structure similar to Python's pathlib, wit
 - **Asynchronous I/O**: Non-blocking file system operations via `AsyncFsOps` trait (requires `async-fs-ops` feature)
 - **Serde Support**: Serialize and deserialize Path with `#[derive(Serialize, Deserialize)]`
 - **Path Joining**: Use `/` operator for intuitive path composition
+- **Path Macro**: Use `path!` for `format!`-style `Path` construction
 
 ## Installation
 
