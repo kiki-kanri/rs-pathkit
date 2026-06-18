@@ -33,7 +33,10 @@ use tokio::fs::{
     ReadDir,
 };
 
-use super::core::Path;
+use super::{
+    core::Path,
+    entry::r#async::AsyncPathEntry,
+};
 
 /// Trait for asynchronous file system operations.
 ///
@@ -88,6 +91,9 @@ pub trait AsyncFsOps {
     async fn is_symlink(&self) -> Result<bool>;
     async fn metadata(&self) -> Result<Metadata>;
     async fn read_dir(&self) -> Result<ReadDir>;
+    async fn read_dir_entries(&self) -> Result<Vec<AsyncPathEntry>>;
+    async fn read_dir_names(&self) -> Result<Vec<String>>;
+    async fn read_dir_paths(&self) -> Result<Vec<Path>>;
     async fn read_json<T: DeserializeOwned>(&self) -> Result<T>;
     async fn read(&self) -> Result<Vec<u8>>;
     async fn read_to_string(&self) -> Result<String>;
@@ -223,6 +229,36 @@ impl AsyncFsOps for Path {
 
     async fn read_dir(&self) -> Result<ReadDir> {
         Ok(fs::read_dir(self).await?)
+    }
+
+    async fn read_dir_entries(&self) -> Result<Vec<AsyncPathEntry>> {
+        let mut entries = Vec::new();
+        let mut read_dir = fs::read_dir(self).await?;
+        while let Some(entry) = read_dir.next_entry().await? {
+            entries.push(AsyncPathEntry::new(entry));
+        }
+
+        Ok(entries)
+    }
+
+    async fn read_dir_names(&self) -> Result<Vec<String>> {
+        let mut names = Vec::new();
+        let mut read_dir = fs::read_dir(self).await?;
+        while let Some(entry) = read_dir.next_entry().await? {
+            names.push(entry.file_name().to_string_lossy().into());
+        }
+
+        Ok(names)
+    }
+
+    async fn read_dir_paths(&self) -> Result<Vec<Path>> {
+        let mut paths = Vec::new();
+        let mut read_dir = fs::read_dir(self).await?;
+        while let Some(entry) = read_dir.next_entry().await? {
+            paths.push(Self::new(entry.path()));
+        }
+
+        Ok(paths)
     }
 
     async fn read_json<T: DeserializeOwned>(&self) -> Result<T> {
@@ -531,6 +567,61 @@ mod tests {
 
         // Should have 3 entries: 2 files + 1 directory
         assert_eq!(count, 3);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_read_dir_entries() -> Result<()> {
+        let temp_dir = tempdir()?;
+        async_fs::write(temp_dir.path().join("file1.txt"), "content1").await?;
+        async_fs::write(temp_dir.path().join("file2.txt"), "content2").await?;
+
+        let dir_path = Path::new(temp_dir.path());
+        let entries = dir_path.read_dir_entries().await?;
+        assert_eq!(entries.len(), 2);
+
+        let paths: Vec<_> = entries.iter().map(AsyncPathEntry::path).collect();
+        let path_strings: Vec<_> = paths
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
+            .collect();
+
+        assert!(path_strings.contains(&"file1.txt".to_string()));
+        assert!(path_strings.contains(&"file2.txt".to_string()));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_read_dir_names() -> Result<()> {
+        let temp_dir = tempdir()?;
+        async_fs::write(temp_dir.path().join("a.txt"), "").await?;
+        async_fs::write(temp_dir.path().join("b.txt"), "").await?;
+        async_fs::create_dir(temp_dir.path().join("subdir")).await?;
+
+        let dir = Path::new(temp_dir.path());
+        let names = dir.read_dir_names().await?;
+        assert_eq!(names.len(), 3);
+        assert!(names.contains(&String::from("a.txt")));
+        assert!(names.contains(&String::from("b.txt")));
+        assert!(names.contains(&String::from("subdir")));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_read_dir_paths() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let file_a = temp_dir.path().join("file_a.txt");
+        let file_b = temp_dir.path().join("file_b.txt");
+        async_fs::write(&file_a, "").await?;
+        async_fs::write(&file_b, "").await?;
+
+        let dir = Path::new(temp_dir.path());
+        let paths = dir.read_dir_paths().await?;
+        assert_eq!(paths.len(), 2);
+        for path in &paths {
+            assert!(path.is_absolute());
+        }
         Ok(())
     }
 

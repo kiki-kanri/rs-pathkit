@@ -145,7 +145,7 @@ The following traits are implemented for SeaORM integration:
 - `create_dir_sync()`, `create_dir_all_sync()`, `remove_dir_sync()`
 - `remove_file_sync()`, `remove_dir_all_sync()`
 - `metadata_sync()`, `get_file_size_sync()`, `truncate_sync()`
-- `set_permissions_sync()`, `read_dir_sync()`, `read_dir_names_sync()`, `read_dir_paths_sync()`, `empty_dir_sync()`
+- `set_permissions_sync()`, `read_dir_sync()`, `read_dir_entries_sync()`, `read_dir_names_sync()`, `read_dir_paths_sync()`, `empty_dir_sync()`
 - `chmod_sync()`, `chown_sync()` (Unix only)
 - `is_block_device_sync()`, `is_char_device_sync()`, `is_fifo_sync()`, `is_socket_sync()` (Unix only)
 - `copy_file_sync()`, `hard_link_sync()`, `soft_link_sync()`
@@ -169,7 +169,7 @@ Same operations as SyncFsOps but async:
 - `create_dir()`, `create_dir_all()`, `remove_dir()`
 - `remove_file()`, `remove_dir_all()`
 - `metadata()`, `get_file_size()`, `truncate()`
-- `set_permissions()`, `read_dir()`, `empty_dir()`
+- `set_permissions()`, `read_dir()`, `read_dir_entries()`, `read_dir_names()`, `read_dir_paths()`, `empty_dir()`
 - `chmod()`, `chown()` (Unix only)
 - `is_block_device()`, `is_char_device()`, `is_fifo()`, `is_socket()` (Unix only)
 

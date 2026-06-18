@@ -131,6 +131,7 @@
 mod async_fs_ops;
 mod core;
 mod div;
+mod entry;
 mod macros;
 #[cfg(feature = "sea-orm")]
 mod sea_orm;
@@ -139,7 +140,10 @@ mod traits;
 
 #[cfg(feature = "async-fs-ops")]
 pub use crate::async_fs_ops::AsyncFsOps;
+#[cfg(feature = "async-fs-ops")]
+pub use crate::entry::r#async::AsyncPathEntry;
 pub use crate::{
     core::Path,
+    entry::sync::PathEntry,
     sync_fs_ops::SyncFsOps,
 };

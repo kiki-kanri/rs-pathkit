@@ -39,7 +39,10 @@ use serde_json::{
     to_vec_pretty,
 };
 
-use super::core::Path;
+use super::{
+    core::Path,
+    entry::sync::PathEntry,
+};
 
 /// Trait for synchronous file system operations.
 ///
@@ -91,6 +94,7 @@ pub trait SyncFsOps {
     fn is_socket_sync(&self) -> Result<bool>;
     fn is_symlink_sync(&self) -> Result<bool>;
     fn metadata_sync(&self) -> Result<Metadata>;
+    fn read_dir_entries_sync(&self) -> Result<Vec<PathEntry>>;
     fn read_dir_names_sync(&self) -> Result<Vec<String>>;
     fn read_dir_paths_sync(&self) -> Result<Vec<Path>>;
     fn read_dir_sync(&self) -> Result<ReadDir>;
@@ -226,6 +230,15 @@ impl SyncFsOps for Path {
 
     fn metadata_sync(&self) -> Result<Metadata> {
         Ok(fs::metadata(self)?)
+    }
+
+    fn read_dir_entries_sync(&self) -> Result<Vec<PathEntry>> {
+        let mut entries = Vec::new();
+        for entry in fs::read_dir(self)? {
+            entries.push(PathEntry::new(entry?));
+        }
+
+        Ok(entries)
     }
 
     fn read_dir_names_sync(&self) -> Result<Vec<String>> {
