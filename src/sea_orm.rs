@@ -49,6 +49,7 @@ use crate::Path;
 // ---------------------------------------------------------------------------
 
 impl From<Path> for Value {
+    #[inline]
     fn from(val: Path) -> Self {
         Value::String(Some(Box::new(val.to_string_lossy().into_owned())))
     }
@@ -59,6 +60,7 @@ impl From<Path> for Value {
 // ---------------------------------------------------------------------------
 
 impl Nullable for Path {
+    #[inline]
     fn null() -> Value {
         Value::String(None)
     }
@@ -88,14 +90,17 @@ impl ValueType for Path {
         }
     }
 
+    #[inline]
     fn type_name() -> String {
         stringify!(Path).to_owned()
     }
 
+    #[inline]
     fn array_type() -> ArrayType {
         ArrayType::String
     }
 
+    #[inline]
     fn column_type() -> ColumnType {
         ColumnType::String(StringLen::None)
     }

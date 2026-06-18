@@ -5,6 +5,7 @@ use super::core::Path;
 impl Div<&Path> for &Path {
     type Output = Path;
 
+    #[inline]
     fn div(self, rhs: &Path) -> Self::Output {
         self.join(rhs)
     }
@@ -13,6 +14,7 @@ impl Div<&Path> for &Path {
 impl Div<&Path> for Path {
     type Output = Path;
 
+    #[inline]
     fn div(self, rhs: &Path) -> Self::Output {
         self.join(rhs)
     }
@@ -21,6 +23,7 @@ impl Div<&Path> for Path {
 impl Div<Path> for &Path {
     type Output = Path;
 
+    #[inline]
     fn div(self, rhs: Path) -> Self::Output {
         self.join(&rhs)
     }
@@ -29,6 +32,7 @@ impl Div<Path> for &Path {
 impl Div<Path> for Path {
     type Output = Path;
 
+    #[inline]
     fn div(self, rhs: Path) -> Self::Output {
         self.join(&rhs)
     }
@@ -38,6 +42,7 @@ impl Div<Path> for Path {
 impl Div<&str> for &Path {
     type Output = Path;
 
+    #[inline]
     fn div(self, rhs: &str) -> Self::Output {
         self.join(rhs)
     }
@@ -47,6 +52,7 @@ impl Div<&str> for &Path {
 impl Div<&String> for &Path {
     type Output = Path;
 
+    #[inline]
     fn div(self, rhs: &String) -> Self::Output {
         self.join(rhs.as_str())
     }
@@ -56,6 +62,7 @@ impl Div<&String> for &Path {
 impl Div<String> for &Path {
     type Output = Path;
 
+    #[inline]
     fn div(self, rhs: String) -> Self::Output {
         self.join(rhs.as_str())
     }
@@ -65,6 +72,7 @@ impl Div<String> for &Path {
 impl Div<&str> for Path {
     type Output = Path;
 
+    #[inline]
     fn div(self, rhs: &str) -> Self::Output {
         self.join(rhs)
     }
@@ -74,6 +82,7 @@ impl Div<&str> for Path {
 impl Div<&String> for Path {
     type Output = Path;
 
+    #[inline]
     fn div(self, rhs: &String) -> Self::Output {
         self.join(rhs.as_str())
     }
@@ -83,6 +92,7 @@ impl Div<&String> for Path {
 impl Div<String> for Path {
     type Output = Path;
 
+    #[inline]
     fn div(self, rhs: String) -> Self::Output {
         self.join(rhs.as_str())
     }

@@ -16,12 +16,14 @@ use std::{
 use super::core::Path;
 
 impl AsRef<StdPath> for Path {
+    #[inline]
     fn as_ref(&self) -> &StdPath {
         &self.0
     }
 }
 
 impl Borrow<StdPath> for Path {
+    #[inline]
     fn borrow(&self) -> &StdPath {
         &self.0
     }
@@ -30,30 +32,35 @@ impl Borrow<StdPath> for Path {
 impl Deref for Path {
     type Target = StdPath;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 impl Display for Path {
+    #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "{}", self.to_string_lossy())
     }
 }
 
 impl From<&StdPath> for Path {
+    #[inline]
     fn from(path: &StdPath) -> Self {
         Self(path.to_path_buf())
     }
 }
 
 impl From<&str> for Path {
+    #[inline]
     fn from(path: &str) -> Self {
         Self(PathBuf::from(path))
     }
 }
 
 impl AsRef<OsStr> for Path {
+    #[inline]
     fn as_ref(&self) -> &OsStr {
         self.0.as_os_str()
     }
@@ -74,6 +81,7 @@ impl AsRef<OsStr> for Path {
 /// assert_eq!(from_string.to_str(), Some("test/path"));
 /// ```
 impl From<String> for Path {
+    #[inline]
     fn from(path: String) -> Self {
         Self(PathBuf::from(path))
     }
@@ -95,6 +103,7 @@ impl From<String> for Path {
 /// assert_eq!(s, "/test/path");
 /// ```
 impl From<Path> for String {
+    #[inline]
     fn from(path: Path) -> Self {
         path.to_string_lossy().into_owned()
     }
@@ -115,6 +124,7 @@ impl From<Path> for String {
 /// assert_eq!(s, "/test/path");
 /// ```
 impl AsRef<str> for Path {
+    #[inline]
     fn as_ref(&self) -> &str {
         // to_string_lossy() always returns Some because we don't check for lossy conversion
         // The unwrap is safe: to_string_lossy() never panics, only returns Owned
@@ -138,18 +148,21 @@ impl AsRef<str> for Path {
 /// assert_eq!(*buf, PathBuf::from("/test/path"));
 /// ```
 impl AsRef<PathBuf> for Path {
+    #[inline]
     fn as_ref(&self) -> &PathBuf {
         &self.0
     }
 }
 
 impl From<Path> for PathBuf {
+    #[inline]
     fn from(path: Path) -> Self {
         path.0
     }
 }
 
 impl AsRef<Path> for Path {
+    #[inline]
     fn as_ref(&self) -> &Path {
         self
     }

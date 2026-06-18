@@ -79,6 +79,7 @@ impl Path {
     /// // From std::path::Path
     /// let path = Path::new(std::path::Path::new("/test/path"));
     /// ```
+    #[inline]
     pub fn new<P: AsRef<StdPath>>(path: P) -> Self {
         Self(path.as_ref().to_path_buf())
     }
@@ -144,6 +145,7 @@ impl Path {
     /// let std_path = path.as_path();
     /// assert_eq!(std_path, std::path::Path::new("/test/path"));
     /// ```
+    #[inline]
     pub fn as_path(&self) -> &StdPath {
         &self.0
     }
@@ -179,6 +181,7 @@ impl Path {
     /// let joined = path.join(&format!("subdir{0}file.txt", MAIN_SEPARATOR));
     /// assert_eq!(joined.to_str(), Some(format!("{0}base{0}subdir{0}file.txt", MAIN_SEPARATOR).as_str()));
     /// ```
+    #[inline]
     pub fn join(&self, path: impl AsRef<StdPath>) -> Self {
         Self::new(self.0.join(path))
     }
@@ -197,6 +200,7 @@ impl Path {
     /// let root = Path::new("/");
     /// assert!(root.parent().is_none());
     /// ```
+    #[inline]
     pub fn parent(&self) -> Option<Self> {
         self.0.parent().map(Self::new)
     }
@@ -213,6 +217,7 @@ impl Path {
     /// let buf: PathBuf = path.to_path_buf();
     /// assert_eq!(buf, PathBuf::from("/test/path"));
     /// ```
+    #[inline]
     pub fn to_path_buf(&self) -> PathBuf {
         self.0.clone()
     }
@@ -231,6 +236,7 @@ impl Path {
     /// let path = Path::new("/path/to/app.log");
     /// assert_eq!(path.with_added_extension("1").to_str(), Some("/path/to/app.log.1"));
     /// ```
+    #[inline]
     pub fn with_added_extension<S: AsRef<OsStr>>(&self, extension: S) -> Self {
         Self::new(self.0.with_added_extension(extension))
     }
@@ -250,6 +256,7 @@ impl Path {
     /// let path = Path::new("/path/to/file");
     /// assert_eq!(path.with_extension("txt").to_str(), Some("/path/to/file.txt"));
     /// ```
+    #[inline]
     pub fn with_extension<S: AsRef<OsStr>>(&self, extension: S) -> Self {
         Self::new(self.0.with_extension(extension))
     }
@@ -267,6 +274,7 @@ impl Path {
     /// let path = Path::new("/path/to/file.txt");
     /// assert_eq!(path.with_file_name("other.md").to_str(), Some("/path/to/other.md"));
     /// ```
+    #[inline]
     pub fn with_file_name<S: AsRef<OsStr>>(&self, file_name: S) -> Self {
         Self::new(self.0.with_file_name(file_name))
     }
