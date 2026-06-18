@@ -57,8 +57,9 @@ pub struct Path(pub(crate) PathBuf);
 impl Path {
     /// Creates a new `Path` from a given path.
     ///
-    /// This method accepts any type that can be converted to `PathBuf`,
-    /// including `&str`, `String`, `PathBuf`, and `&Path`.
+    /// This method accepts any type that can be referenced as a standard path,
+    /// including `&str`, `String`, `OsStr`, `OsString`, `PathBuf`, `&std::path::Path`,
+    /// and `&Path`.
     ///
     /// # Example
     ///
@@ -74,9 +75,12 @@ impl Path {
     /// // From PathBuf
     /// use std::path::PathBuf;
     /// let path = Path::new(PathBuf::from("/test/path"));
+    ///
+    /// // From std::path::Path
+    /// let path = Path::new(std::path::Path::new("/test/path"));
     /// ```
-    pub fn new<P: Into<PathBuf>>(path: P) -> Self {
-        Self(path.into())
+    pub fn new<P: AsRef<StdPath>>(path: P) -> Self {
+        Self(path.as_ref().to_path_buf())
     }
 
     /// Converts the path to an absolute path.
@@ -213,6 +217,24 @@ impl Path {
         self.0.clone()
     }
 
+    /// Returns a new path with an extension appended to the full file name.
+    ///
+    /// This mirrors [`std::path::Path::with_added_extension`] but keeps the
+    /// fluent API in `pathkit::Path` instead of returning `PathBuf`. Unlike
+    /// [`Self::with_extension`], this appends instead of replacing.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use pathkit::Path;
+    ///
+    /// let path = Path::new("/path/to/app.log");
+    /// assert_eq!(path.with_added_extension("1").to_str(), Some("/path/to/app.log.1"));
+    /// ```
+    pub fn with_added_extension<S: AsRef<OsStr>>(&self, extension: S) -> Self {
+        Self::new(self.0.with_added_extension(extension))
+    }
+
     /// Returns a new path with a different file extension.
     ///
     /// # Example
@@ -231,12 +253,32 @@ impl Path {
     pub fn with_extension<S: AsRef<OsStr>>(&self, extension: S) -> Self {
         Self::new(self.0.with_extension(extension))
     }
+
+    /// Returns a new path with a different file name.
+    ///
+    /// This mirrors [`std::path::Path::with_file_name`] but keeps the fluent
+    /// API in `pathkit::Path` instead of returning `PathBuf`.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use pathkit::Path;
+    ///
+    /// let path = Path::new("/path/to/file.txt");
+    /// assert_eq!(path.with_file_name("other.md").to_str(), Some("/path/to/other.md"));
+    /// ```
+    pub fn with_file_name<S: AsRef<OsStr>>(&self, file_name: S) -> Self {
+        Self::new(self.0.with_file_name(file_name))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::{
-        ffi::OsStr,
+        ffi::{
+            OsStr,
+            OsString,
+        },
         path::MAIN_SEPARATOR,
     };
 
@@ -254,6 +296,23 @@ mod tests {
 
         // Test with PathBuf
         let path = Path::new(PathBuf::from("/test/path"));
+        assert_eq!(path.to_str(), Some("/test/path"));
+
+        // Test with OsStr
+        let path = Path::new(OsStr::new("/test/path"));
+        assert_eq!(path.to_str(), Some("/test/path"));
+
+        // Test with OsString
+        let path = Path::new(OsString::from("/test/path"));
+        assert_eq!(path.to_str(), Some("/test/path"));
+
+        // Test with StdPath
+        let path = Path::new(StdPath::new("/test/path"));
+        assert_eq!(path.to_str(), Some("/test/path"));
+
+        // Test with pathkit::Path reference
+        let original = Path::new("/test/path");
+        let path = Path::new(&original);
         assert_eq!(path.to_str(), Some("/test/path"));
     }
 
@@ -319,6 +378,25 @@ mod tests {
         // Test replacing extension
         let path = Path::new("/path/to/file.txt");
         assert_eq!(path.with_extension("json").to_str(), Some("/path/to/file.json"));
+    }
+
+    #[test]
+    fn test_with_file_name() {
+        let path = Path::new("/path/to/file.txt");
+        let renamed: Path = path.with_file_name("other.md");
+
+        assert_eq!(renamed.to_str(), Some("/path/to/other.md"));
+    }
+
+    #[test]
+    fn test_with_added_extension() {
+        let path = Path::new("/path/to/file.tar.gz");
+        let rotated: Path = path.with_added_extension("1");
+
+        assert_eq!(rotated.to_str(), Some("/path/to/file.tar.gz.1"));
+
+        let path = Path::new("/path/to/file");
+        assert_eq!(path.with_added_extension("txt").to_str(), Some("/path/to/file.txt"));
     }
 
     #[test]

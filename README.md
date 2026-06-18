@@ -133,7 +133,7 @@ The following traits are implemented for SeaORM integration:
 ## API Overview
 
 ### Core Path Methods
-- `new()`, `join()`, `parent()`, `with_extension()`
+- `new()`, `join()`, `parent()`, `with_file_name()`, `with_extension()`, `with_added_extension()`
 - `absolutize()`, `absolutize_from()`, `absolutize_virtually()`
 - `canonicalize()`
 - `is_absolute()`, `is_relative()`
