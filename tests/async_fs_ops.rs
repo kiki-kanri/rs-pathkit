@@ -17,7 +17,13 @@ use tempfile::{
     NamedTempFile,
     tempdir,
 };
-use tokio::fs as async_fs;
+use tokio::{
+    fs as async_fs,
+    io::{
+        AsyncReadExt,
+        AsyncWriteExt,
+    },
+};
 
 // Test exists
 #[tokio::test]
@@ -570,5 +576,34 @@ async fn test_move_to_moves_dir() -> Result<()> {
     assert!(!src.exists().await?);
     assert!(dest.is_dir().await?);
     assert_eq!((&dest / "nested.txt").read().await?, b"nested");
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_open_returns_readable_file() -> Result<()> {
+    let temp_file = NamedTempFile::new()?;
+    let path = path!(&temp_file);
+    path.write(b"open test").await?;
+
+    let mut file = path.open().await?;
+    let mut content = String::new();
+    file.read_to_string(&mut content).await?;
+
+    assert_eq!(content, "open test");
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_open_with_options_uses_options() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path!(&temp_dir) / "created.txt";
+    let mut options = async_fs::OpenOptions::new();
+    options.write(true).create_new(true);
+
+    let mut file = path.open_with_options(&options).await?;
+    file.write_all(b"created").await?;
+    drop(file);
+
+    assert_eq!(path.read().await?, b"created");
     Ok(())
 }

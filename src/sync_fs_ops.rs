@@ -96,6 +96,8 @@ pub trait SyncFsOps {
     fn is_symlink_sync(&self) -> Result<bool>;
     fn metadata_sync(&self) -> Result<Metadata>;
     fn move_to_sync(&self, dest: impl AsRef<StdPath>) -> Result<Path>;
+    fn open_sync(&self) -> Result<File>;
+    fn open_with_options_sync(&self, options: &OpenOptions) -> Result<File>;
     fn read_dir_entries_sync(&self) -> Result<Vec<PathEntry>>;
     fn read_dir_names_sync(&self) -> Result<Vec<String>>;
     fn read_dir_paths_sync(&self) -> Result<Vec<Path>>;
@@ -238,6 +240,14 @@ impl SyncFsOps for Path {
         let dest = Path::new(dest);
         fs::rename(self, &dest)?;
         Ok(dest)
+    }
+
+    fn open_sync(&self) -> Result<File> {
+        Ok(File::open(self)?)
+    }
+
+    fn open_with_options_sync(&self, options: &OpenOptions) -> Result<File> {
+        Ok(options.open(self)?)
     }
 
     fn read_dir_entries_sync(&self) -> Result<Vec<PathEntry>> {

@@ -32,6 +32,7 @@ use serde_json::{
 };
 use tokio::fs::{
     self,
+    File,
     OpenOptions,
     ReadDir,
 };
@@ -94,6 +95,8 @@ pub trait AsyncFsOps {
     async fn is_symlink(&self) -> Result<bool>;
     async fn metadata(&self) -> Result<Metadata>;
     async fn move_to(&self, dest: impl AsRef<StdPath> + Send) -> Result<Path>;
+    async fn open(&self) -> Result<File>;
+    async fn open_with_options(&self, options: &OpenOptions) -> Result<File>;
     async fn read_dir(&self) -> Result<ReadDir>;
     async fn read_dir_entries(&self) -> Result<Vec<AsyncPathEntry>>;
     async fn read_dir_names(&self) -> Result<Vec<String>>;
@@ -231,6 +234,14 @@ impl AsyncFsOps for Path {
         let dest = Path::new(dest);
         fs::rename(self, &dest).await?;
         Ok(dest)
+    }
+
+    async fn open(&self) -> Result<File> {
+        Ok(File::open(self).await?)
+    }
+
+    async fn open_with_options(&self, options: &OpenOptions) -> Result<File> {
+        Ok(options.open(self).await?)
     }
 
     async fn read(&self) -> Result<Vec<u8>> {

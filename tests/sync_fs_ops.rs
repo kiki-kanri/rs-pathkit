@@ -1,4 +1,10 @@
-use std::fs;
+use std::{
+    fs,
+    io::{
+        Read,
+        Write,
+    },
+};
 
 use anyhow::{
     Result,
@@ -675,5 +681,34 @@ fn test_move_to_sync_moves_dir() -> Result<()> {
     assert!(!src.exists_sync()?);
     assert!(dest.is_dir_sync()?);
     assert_eq!((&dest / "nested.txt").read_sync()?, b"nested");
+    Ok(())
+}
+
+#[test]
+fn test_open_sync_returns_readable_file() -> Result<()> {
+    let temp_file = NamedTempFile::new()?;
+    let path = path!(&temp_file);
+    path.write_sync(b"open test")?;
+
+    let mut file = path.open_sync()?;
+    let mut content = String::new();
+    file.read_to_string(&mut content)?;
+
+    assert_eq!(content, "open test");
+    Ok(())
+}
+
+#[test]
+fn test_open_with_options_sync_uses_options() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path!(&temp_dir) / "created.txt";
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+
+    let mut file = path.open_with_options_sync(&options)?;
+    file.write_all(b"created")?;
+    drop(file);
+
+    assert_eq!(path.read_sync()?, b"created");
     Ok(())
 }
