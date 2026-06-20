@@ -173,7 +173,12 @@ impl AsRef<Path> for Path {
 mod tests {
     use std::{
         borrow::Borrow,
+        collections::hash_map::DefaultHasher,
         ffi::OsStr,
+        hash::{
+            Hash,
+            Hasher,
+        },
         ops::Deref,
         path::{
             Path as StdPath,
@@ -182,11 +187,12 @@ mod tests {
     };
 
     use super::Path;
+    use crate::path;
 
     // Test AsRef<StdPath>
     #[test]
     fn test_as_ref_std_path() {
-        let path = Path::new("/test/path");
+        let path = path!("/test/path");
         let std_path: &StdPath = path.as_ref();
         assert_eq!(std_path, StdPath::new("/test/path"));
     }
@@ -194,7 +200,7 @@ mod tests {
     // Test AsRef<Path> - check that as_ref returns the path through deref
     #[test]
     fn test_as_ref_self() {
-        let path = Path::new("/test/path");
+        let path = path!("/test/path");
         // as_ref returns &StdPath through Deref
         let path_ref: &StdPath = path.as_ref();
         assert_eq!(path_ref, StdPath::new("/test/path"));
@@ -203,7 +209,7 @@ mod tests {
     // Test Borrow<StdPath>
     #[test]
     fn test_borrow() {
-        let path = Path::new("/test/path");
+        let path = path!("/test/path");
         let borrowed: &StdPath = path.borrow();
         assert_eq!(borrowed, StdPath::new("/test/path"));
     }
@@ -211,7 +217,7 @@ mod tests {
     // Test Deref
     #[test]
     fn test_deref() {
-        let path = Path::new("/test/path");
+        let path = path!("/test/path");
         let dereferenced: &StdPath = path.deref();
         assert_eq!(dereferenced, StdPath::new("/test/path"));
     }
@@ -220,7 +226,7 @@ mod tests {
     // Test Display
     #[test]
     fn test_display() {
-        let path = Path::new("/test/path");
+        let path = path!("/test/path");
         let display: String = path.to_string();
         assert_eq!(display, "/test/path");
     }
@@ -228,14 +234,14 @@ mod tests {
     // Test Display format
     #[test]
     fn test_display_format() {
-        let path = Path::new("/test/path");
+        let path = path!("/test/path");
         assert_eq!(format!("{}", path), "/test/path");
     }
 
     // Test Display with other format specifiers
     #[test]
     fn test_display_format_args() {
-        let path = Path::new("file.txt");
+        let path = path!("file.txt");
         assert_eq!(format!("Path: {}", path), "Path: file.txt");
     }
 
@@ -247,18 +253,18 @@ mod tests {
         assert_eq!(path.to_str(), Some("/test/path"));
     }
 
-    // Test From<PathBuf> for Path - use Path::new instead
+    // Test From<PathBuf> for Path
     #[test]
     fn test_from_pathbuf() {
         let pathbuf = PathBuf::from("/test/path");
-        let path = Path::new(pathbuf);
+        let path = path!(pathbuf);
         assert_eq!(path.to_path_buf(), PathBuf::from("/test/path"));
     }
 
     // Test From<Path> for PathBuf
     #[test]
     fn test_from_path_to_pathbuf() {
-        let path = Path::new("/test/path");
+        let path = path!("/test/path");
         let pathbuf: PathBuf = PathBuf::from(path);
         assert_eq!(pathbuf, PathBuf::from("/test/path"));
     }
@@ -269,7 +275,7 @@ mod tests {
     // Test to_string_lossy
     #[test]
     fn test_to_string_lossy() {
-        let path = Path::new("/test/path");
+        let path = path!("/test/path");
         let lost = path.to_string_lossy();
         assert_eq!(lost, "/test/path");
     }
@@ -277,7 +283,7 @@ mod tests {
     // Test to_str
     #[test]
     fn test_to_str() {
-        let path = Path::new("/test/path");
+        let path = path!("/test/path");
         assert_eq!(path.to_str(), Some("/test/path"));
     }
 
@@ -285,14 +291,14 @@ mod tests {
     #[test]
     fn test_to_str_unicode() {
         // Test normal unicode path
-        let path = Path::new("/test/文件.txt");
+        let path = path!("/test/文件.txt");
         assert_eq!(path.to_str(), Some("/test/文件.txt"));
     }
 
     // Test clone
     #[test]
     fn test_clone() {
-        let path = Path::new("/test/path");
+        let path = path!("/test/path");
         let cloned = path.clone();
         assert_eq!(path, cloned);
     }
@@ -300,9 +306,9 @@ mod tests {
     // Test clone is independent
     #[test]
     fn test_clone_independence() {
-        let mut path1 = Path::new("/test/path");
+        let mut path1 = path!("/test/path");
         let path2 = path1.clone();
-        path1 = Path::new("/other/path");
+        path1 = path!("/other/path");
         assert_eq!(path2.to_str(), Some("/test/path"));
         assert_eq!(path1.to_str(), Some("/other/path"));
     }
@@ -310,9 +316,9 @@ mod tests {
     // Test equality
     #[test]
     fn test_eq() {
-        let path1 = Path::new("/test/path");
-        let path2 = Path::new("/test/path");
-        let path3 = Path::new("/other/path");
+        let path1 = path!("/test/path");
+        let path2 = path!("/test/path");
+        let path3 = path!("/other/path");
 
         assert_eq!(path1, path2);
         assert_ne!(path1, path3);
@@ -321,7 +327,7 @@ mod tests {
     // Test equality with different types
     #[test]
     fn test_eq_with_std_path() {
-        let path = Path::new("/test/path");
+        let path = path!("/test/path");
         let std_path = StdPath::new("/test/path");
         // Can't directly compare different types without explicit conversion
         assert_eq!(path.as_path(), std_path);
@@ -330,7 +336,7 @@ mod tests {
     // Test Debug
     #[test]
     fn test_debug() {
-        let path = Path::new("/test/path");
+        let path = path!("/test/path");
         let debug_str = format!("{:?}", path);
         assert!(debug_str.contains("Path"));
         assert!(debug_str.contains("/test/path"));
@@ -339,17 +345,9 @@ mod tests {
     // Test Hash
     #[test]
     fn test_hash() {
-        use std::{
-            collections::hash_map::DefaultHasher,
-            hash::{
-                Hash,
-                Hasher,
-            },
-        };
-
-        let path1 = Path::new("/test/path");
-        let path2 = Path::new("/test/path");
-        let path3 = Path::new("/other/path");
+        let path1 = path!("/test/path");
+        let path2 = path!("/test/path");
+        let path3 = path!("/other/path");
 
         let mut hasher1 = DefaultHasher::new();
         let mut hasher2 = DefaultHasher::new();
@@ -366,7 +364,7 @@ mod tests {
     // Test PartialEq with PathBuf
     #[test]
     fn test_partial_eq_pathbuf() {
-        let path = Path::new("/test/path");
+        let path = path!("/test/path");
         let pathbuf = PathBuf::from("/test/path");
 
         assert_eq!(path.as_path(), pathbuf.as_path());
@@ -374,7 +372,7 @@ mod tests {
 
     #[test]
     fn test_as_ref_pathbuf() {
-        let path = Path::new("/test/path");
+        let path = path!("/test/path");
         let pathbuf: &PathBuf = path.as_ref();
 
         assert_eq!(pathbuf, &PathBuf::from("/test/path"));
@@ -383,7 +381,7 @@ mod tests {
     // Test as_os_str
     #[test]
     fn test_as_os_str() {
-        let path = Path::new("/test/path");
+        let path = path!("/test/path");
         let os_str = path.as_os_str();
         assert_eq!(os_str, std::ffi::OsStr::new("/test/path"));
     }
@@ -391,7 +389,7 @@ mod tests {
     // Test AsRef<OsStr>
     #[test]
     fn test_as_ref_os_str() {
-        let path = Path::new("/test/path");
+        let path = path!("/test/path");
         let os_str: &OsStr = path.as_ref();
         assert_eq!(os_str, OsStr::new("/test/path"));
     }
@@ -414,7 +412,7 @@ mod tests {
     // Test From<Path> for String
     #[test]
     fn test_to_string() {
-        let path = Path::new("/test/path");
+        let path = path!("/test/path");
         let s: String = String::from(path);
         assert_eq!(s, "/test/path");
     }
@@ -422,7 +420,7 @@ mod tests {
     // Test AsRef<str>
     #[test]
     fn test_as_ref_str() {
-        let path = Path::new("/test/path");
+        let path = path!("/test/path");
         let s: &str = path.as_ref();
         assert_eq!(s, "/test/path");
     }
@@ -430,7 +428,7 @@ mod tests {
     // Test that path has content (skip is_empty - it's unstable)
     #[test]
     fn test_path_has_content() {
-        let path = Path::new("/test/path");
+        let path = path!("/test/path");
         // Just verify the path string is not empty
         assert!(path.to_str().is_some_and(|path| !path.is_empty()));
     }

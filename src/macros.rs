@@ -29,11 +29,9 @@ macro_rules! path {
 
 #[cfg(test)]
 mod tests {
-    use crate::Path;
-
     #[test]
     fn path_macro_creates_path_from_literal() {
-        assert_eq!(path!("/tmp/example"), Path::new("/tmp/example"));
+        assert_eq!(path!("/tmp/example").to_str(), Some("/tmp/example"));
     }
 
     #[test]
@@ -41,15 +39,19 @@ mod tests {
         let dir = "configs";
         let extension = "json";
 
-        assert_eq!(path!("/tmp/{dir}/app.{extension}"), Path::new("/tmp/configs/app.json"));
         assert_eq!(
-            path!("/tmp/{}/app.{}", dir, extension),
-            Path::new("/tmp/configs/app.json")
+            path!("/tmp/{dir}/app.{extension}").to_str(),
+            Some("/tmp/configs/app.json")
+        );
+
+        assert_eq!(
+            path!("/tmp/{}/app.{}", dir, extension).to_str(),
+            Some("/tmp/configs/app.json")
         );
     }
 
     #[test]
     fn path_macro_accepts_direct_path_expression() {
-        assert_eq!(path!(String::from("/tmp/example")), Path::new("/tmp/example"));
+        assert_eq!(path!(String::from("/tmp/example")).to_str(), Some("/tmp/example"));
     }
 }

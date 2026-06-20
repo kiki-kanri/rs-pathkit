@@ -122,6 +122,7 @@ pub(crate) mod tests {
     };
 
     use super::*;
+    use crate::path;
 
     // -------------------------------------------------------------------
     // Compile-check models using DeriveEntityModel with Path fields
@@ -177,7 +178,7 @@ pub(crate) mod tests {
     #[test]
     fn test_into_value_roundtrip_tempdir() -> Result<()> {
         let temp_dir = tempdir()?;
-        let path = Path::new(temp_dir.path());
+        let path = path!(&temp_dir);
 
         // Path -> Value -> Path roundtrip
         let value: Value = path.clone().into();
@@ -216,7 +217,7 @@ pub(crate) mod tests {
     #[test]
     fn test_path_with_unicode() -> Result<()> {
         let temp_dir = tempdir()?;
-        let path = Path::new(temp_dir.path().join("文件/日本語.txt"));
+        let path = path!(&temp_dir) / "文件" / "日本語.txt";
 
         let value: Value = path.clone().into();
         let recovered =
@@ -229,7 +230,7 @@ pub(crate) mod tests {
     #[test]
     fn test_into_value_named_temp_file() -> Result<()> {
         let temp_file = NamedTempFile::new()?;
-        let path = Path::new(temp_file.path());
+        let path = path!(&temp_file);
 
         let value: Value = path.clone().into();
         assert!(
