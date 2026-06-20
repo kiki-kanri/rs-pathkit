@@ -84,6 +84,7 @@ tokio = { version = "1.52.3", features = ["fs", "rt", "io-util"], optional = tru
 
 [dev-dependencies]
 libc = "0.2.186"
+sea-orm = { version = "1.1.20", features = ["mock"] }
 tempfile = "3.27.0"
 tokio = { version = "1.52.3", features = ["macros"] }
 

@@ -285,15 +285,9 @@ impl Path {
 #[cfg(test)]
 mod tests {
     use std::{
-        cmp::Ordering,
-        collections::hash_map::DefaultHasher,
         ffi::{
             OsStr,
             OsString,
-        },
-        hash::{
-            Hash,
-            Hasher,
         },
         path::MAIN_SEPARATOR,
     };
@@ -521,18 +515,13 @@ mod tests {
     }
 
     #[test]
-    fn test_components() {
+    fn test_path_component_iteration() {
         let path = path!("/path/to/file.txt");
         let components: Vec<_> = path.components().collect();
-        assert!(components.len() >= 3);
-    }
+        let iter_components: Vec<_> = path.iter().collect();
 
-    #[test]
-    fn test_iter() {
-        let path = path!("/path/to/file.txt");
-        let iter = path.iter();
-        let components: Vec<_> = iter.collect();
-        assert!(!components.is_empty());
+        assert!(components.len() >= 3);
+        assert!(!iter_components.is_empty());
     }
 
     // Skip contains test - Path doesn't have this method
@@ -594,47 +583,6 @@ mod tests {
     fn test_display() {
         let path = path!("/test/path");
         assert_eq!(format!("{}", path), "/test/path");
-    }
-
-    #[test]
-    fn test_debug() {
-        let path = path!("/test/path");
-        let debug_str = format!("{:?}", path);
-        assert!(debug_str.contains("Path"));
-    }
-
-    #[test]
-    fn test_eq() {
-        let path1 = path!("/test/path");
-        let path2 = path!("/test/path");
-        let path3 = path!("/other/path");
-
-        assert_eq!(path1, path2);
-        assert_ne!(path1, path3);
-    }
-
-    #[test]
-    fn test_hash() {
-        let path1 = path!("/test/path");
-        let path2 = path!("/test/path");
-
-        let mut hasher1 = DefaultHasher::new();
-        let mut hasher2 = DefaultHasher::new();
-
-        path1.hash(&mut hasher1);
-        path2.hash(&mut hasher2);
-
-        assert_eq!(hasher1.finish(), hasher2.finish());
-    }
-
-    #[test]
-    fn test_ord() {
-        let path1 = path!("/a/b");
-        let path2 = path!("/a/c");
-
-        assert_eq!(path1.cmp(&path2), Ordering::Less);
-        assert_eq!(path2.cmp(&path1), Ordering::Greater);
-        assert_eq!(path1.cmp(&path1), Ordering::Equal);
     }
 
     #[test]

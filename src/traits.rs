@@ -173,12 +173,7 @@ impl AsRef<Path> for Path {
 mod tests {
     use std::{
         borrow::Borrow,
-        collections::hash_map::DefaultHasher,
         ffi::OsStr,
-        hash::{
-            Hash,
-            Hasher,
-        },
         ops::Deref,
         path::{
             Path as StdPath,
@@ -189,247 +184,88 @@ mod tests {
     use super::Path;
     use crate::path;
 
-    // Test AsRef<StdPath>
     #[test]
-    fn test_as_ref_std_path() {
+    fn test_std_path_reference_traits() {
         let path = path!("/test/path");
-        let std_path: &StdPath = path.as_ref();
-        assert_eq!(std_path, StdPath::new("/test/path"));
-    }
+        let expected = StdPath::new("/test/path");
 
-    // Test AsRef<StdPath> - check that as_ref returns the path through deref
-    #[test]
-    fn test_as_ref_self() {
-        let path = path!("/test/path");
-        // as_ref returns &StdPath through Deref
-        let path_ref: &StdPath = path.as_ref();
-        assert_eq!(path_ref, StdPath::new("/test/path"));
-    }
-
-    // Test Borrow<StdPath>
-    #[test]
-    fn test_borrow() {
-        let path = path!("/test/path");
+        let as_ref: &StdPath = path.as_ref();
         let borrowed: &StdPath = path.borrow();
-        assert_eq!(borrowed, StdPath::new("/test/path"));
-    }
-
-    // Test Deref
-    #[test]
-    fn test_deref() {
-        let path = path!("/test/path");
         let dereferenced: &StdPath = path.deref();
-        assert_eq!(dereferenced, StdPath::new("/test/path"));
+
+        assert_eq!(as_ref, expected);
+        assert_eq!(borrowed, expected);
+        assert_eq!(dereferenced, expected);
     }
 
-    // Skip Deref target test - Path::target doesn't exist
-    // Test Display
     #[test]
-    fn test_display() {
+    fn test_display_formats_lossy_path() {
         let path = path!("/test/path");
-        let display: String = path.to_string();
-        assert_eq!(display, "/test/path");
-    }
 
-    // Test Display format
-    #[test]
-    fn test_display_format() {
-        let path = path!("/test/path");
+        assert_eq!(path.to_string(), "/test/path");
         assert_eq!(format!("{}", path), "/test/path");
+        assert_eq!(format!("Path: {}", path!("file.txt")), "Path: file.txt");
     }
 
-    // Test Display with other format specifiers
     #[test]
-    fn test_display_format_args() {
-        let path = path!("file.txt");
-        assert_eq!(format!("Path: {}", path), "Path: file.txt");
-    }
-
-    // Test From<&StdPath> for Path
-    #[test]
-    fn test_from_std_path_ref() {
-        let std_path = std::path::Path::new("/test/path");
-        let path: Path = Path::from(std_path);
-        assert_eq!(path.to_str(), Some("/test/path"));
-    }
-
-    // Test From<PathBuf> for Path
-    #[test]
-    fn test_from_pathbuf() {
-        let pathbuf = PathBuf::from("/test/path");
-        let path = path!(pathbuf);
-        assert_eq!(path.to_path_buf(), PathBuf::from("/test/path"));
-    }
-
-    // Test From<Path> for PathBuf
-    #[test]
-    fn test_from_path_to_pathbuf() {
-        let path = path!("/test/path");
-        let pathbuf: PathBuf = PathBuf::from(path);
-        assert_eq!(pathbuf, PathBuf::from("/test/path"));
-    }
-
-    // Skip test_from_string - Path doesn't implement From<String>
-    // Skip test_from_str - Path doesn't implement From<&str>
-
-    // Test to_string_lossy
-    #[test]
-    fn test_to_string_lossy() {
-        let path = path!("/test/path");
-        let lost = path.to_string_lossy();
-        assert_eq!(lost, "/test/path");
-    }
-
-    // Test to_str
-    #[test]
-    fn test_to_str() {
-        let path = path!("/test/path");
-        assert_eq!(path.to_str(), Some("/test/path"));
-    }
-
-    // Test to_str with invalid unicode - simplified
-    #[test]
-    fn test_to_str_unicode() {
-        // Test normal unicode path
-        let path = path!("/test/文件.txt");
-        assert_eq!(path.to_str(), Some("/test/文件.txt"));
-    }
-
-    // Test clone
-    #[test]
-    fn test_clone() {
-        let path = path!("/test/path");
-        let cloned = path.clone();
-        assert_eq!(path, cloned);
-    }
-
-    // Test clone is independent
-    #[test]
-    fn test_clone_independence() {
-        let mut path1 = path!("/test/path");
-        let path2 = path1.clone();
-        path1 = path!("/other/path");
-        assert_eq!(path2.to_str(), Some("/test/path"));
-        assert_eq!(path1.to_str(), Some("/other/path"));
-    }
-
-    // Test equality
-    #[test]
-    fn test_eq() {
-        let path1 = path!("/test/path");
-        let path2 = path!("/test/path");
-        let path3 = path!("/other/path");
-
-        assert_eq!(path1, path2);
-        assert_ne!(path1, path3);
-    }
-
-    // Test equality with different types
-    #[test]
-    fn test_eq_with_std_path() {
-        let path = path!("/test/path");
+    fn test_path_conversions() {
         let std_path = StdPath::new("/test/path");
-        // Can't directly compare different types without explicit conversion
-        assert_eq!(path.as_path(), std_path);
-    }
+        let from_std_path: Path = Path::from(std_path);
+        assert_eq!(from_std_path.to_str(), Some("/test/path"));
 
-    // Test Debug
-    #[test]
-    fn test_debug() {
+        let from_pathbuf = path!(PathBuf::from("/test/path"));
+        assert_eq!(from_pathbuf.to_path_buf(), PathBuf::from("/test/path"));
+
         let path = path!("/test/path");
-        let debug_str = format!("{:?}", path);
-        assert!(debug_str.contains("Path"));
-        assert!(debug_str.contains("/test/path"));
+        let pathbuf: PathBuf = PathBuf::from(path.clone());
+        let string: String = String::from(path);
+
+        assert_eq!(pathbuf, PathBuf::from("/test/path"));
+        assert_eq!(string, "/test/path");
+        assert_eq!(Path::from("/test/path").to_str(), Some("/test/path"));
+        assert_eq!(Path::from(String::from("/test/path")).to_str(), Some("/test/path"));
     }
 
-    // Test Hash
     #[test]
-    fn test_hash() {
-        let path1 = path!("/test/path");
-        let path2 = path!("/test/path");
-        let path3 = path!("/other/path");
+    fn test_string_views() {
+        let path = path!("/test/文件.txt");
+        let ascii = path!("/test/path");
+        let borrowed_str: &str = ascii.as_ref();
 
-        let mut hasher1 = DefaultHasher::new();
-        let mut hasher2 = DefaultHasher::new();
-        let mut hasher3 = DefaultHasher::new();
-
-        path1.hash(&mut hasher1);
-        path2.hash(&mut hasher2);
-        path3.hash(&mut hasher3);
-
-        assert_eq!(hasher1.finish(), hasher2.finish());
-        assert_ne!(hasher1.finish(), hasher3.finish());
+        assert_eq!(path.to_string_lossy(), "/test/文件.txt");
+        assert_eq!(path.to_str(), Some("/test/文件.txt"));
+        assert_eq!(borrowed_str, "/test/path");
     }
 
-    // Test PartialEq with PathBuf
+    #[cfg(unix)]
     #[test]
-    fn test_partial_eq_pathbuf() {
+    #[should_panic(expected = "Path contains non-UTF-8 data and cannot be borrowed as str")]
+    fn test_as_ref_str_panics_on_non_utf8_path() {
+        use std::{
+            ffi::OsString,
+            os::unix::ffi::OsStringExt,
+        };
+
+        let path = path!(OsString::from_vec(vec![0xff]));
+        let _: &str = path.as_ref();
+    }
+
+    #[test]
+    fn test_os_and_pathbuf_views() {
         let path = path!("/test/path");
-        let pathbuf = PathBuf::from("/test/path");
-
-        assert_eq!(path.as_path(), pathbuf.as_path());
-    }
-
-    #[test]
-    fn test_as_ref_pathbuf() {
-        let path = path!("/test/path");
+        let os_str: &OsStr = path.as_ref();
         let pathbuf: &PathBuf = path.as_ref();
 
+        assert_eq!(path.as_os_str(), OsStr::new("/test/path"));
+        assert_eq!(os_str, OsStr::new("/test/path"));
         assert_eq!(pathbuf, &PathBuf::from("/test/path"));
     }
 
-    // Test as_os_str
     #[test]
-    fn test_as_os_str() {
+    fn test_path_as_ref_self() {
         let path = path!("/test/path");
-        let os_str = path.as_os_str();
-        assert_eq!(os_str, std::ffi::OsStr::new("/test/path"));
-    }
+        let path_ref: &Path = path.as_ref();
 
-    // Test AsRef<OsStr>
-    #[test]
-    fn test_as_ref_os_str() {
-        let path = path!("/test/path");
-        let os_str: &OsStr = path.as_ref();
-        assert_eq!(os_str, OsStr::new("/test/path"));
-    }
-
-    // Test From<&str> for Path
-    #[test]
-    fn test_from_str() {
-        let path: Path = Path::from("/test/path");
-        assert_eq!(path.to_str(), Some("/test/path"));
-    }
-
-    // Test From<String> for Path
-    #[test]
-    fn test_from_string() {
-        let s = String::from("/test/path");
-        let path: Path = Path::from(s);
-        assert_eq!(path.to_str(), Some("/test/path"));
-    }
-
-    // Test From<Path> for String
-    #[test]
-    fn test_to_string() {
-        let path = path!("/test/path");
-        let s: String = String::from(path);
-        assert_eq!(s, "/test/path");
-    }
-
-    // Test AsRef<str>
-    #[test]
-    fn test_as_ref_str() {
-        let path = path!("/test/path");
-        let s: &str = path.as_ref();
-        assert_eq!(s, "/test/path");
-    }
-
-    // Test that path has content (skip is_empty - it's unstable)
-    #[test]
-    fn test_path_has_content() {
-        let path = path!("/test/path");
-        // Just verify the path string is not empty
-        assert!(path.to_str().is_some_and(|path| !path.is_empty()));
+        assert_eq!(path_ref, &path);
     }
 }

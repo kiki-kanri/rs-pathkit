@@ -366,6 +366,9 @@ fn test_chown_sync() -> Result<()> {
 // Test is_block_device_sync
 #[test]
 fn test_is_block_device_sync() -> Result<()> {
+    let temp_file = NamedTempFile::new()?;
+    assert!(!path!(&temp_file).is_block_device_sync()?);
+
     let path = path!("/dev/sda"); // Common block device
     if path.exists_sync()? {
         // May fail if not root or device doesn't exist
@@ -378,6 +381,9 @@ fn test_is_block_device_sync() -> Result<()> {
 // Test is_char_device_sync
 #[test]
 fn test_is_char_device_sync() -> Result<()> {
+    let temp_file = NamedTempFile::new()?;
+    assert!(!path!(&temp_file).is_char_device_sync()?);
+
     let path = path!("/dev/zero"); // Common char device
     if path.exists_sync()? {
         assert!(path.is_char_device_sync()?);

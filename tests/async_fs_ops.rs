@@ -484,6 +484,9 @@ async fn test_chown() -> Result<()> {
 // Test is_block_device
 #[tokio::test]
 async fn test_is_block_device() -> Result<()> {
+    let temp_file = NamedTempFile::new()?;
+    assert!(!path!(&temp_file).is_block_device().await?);
+
     let path = path!("/dev/sda"); // Common block device
     if path.exists().await? {
         // May fail if not root or device doesn't exist
@@ -497,6 +500,9 @@ async fn test_is_block_device() -> Result<()> {
 // Test is_char_device
 #[tokio::test]
 async fn test_is_char_device() -> Result<()> {
+    let temp_file = NamedTempFile::new()?;
+    assert!(!path!(&temp_file).is_char_device().await?);
+
     let path = path!("/dev/zero"); // Common char device
     if path.exists().await? {
         assert!(path.is_char_device().await?);

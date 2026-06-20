@@ -116,6 +116,10 @@ pub(crate) mod tests {
         Result,
         anyhow,
     };
+    use sea_orm::{
+        DbBackend,
+        MockDatabase,
+    };
     use tempfile::{
         NamedTempFile,
         tempdir,
@@ -145,6 +149,25 @@ pub(crate) mod tests {
         pub enum Relation {}
 
         impl ActiveModelBehavior for ActiveModel {}
+
+        #[tokio::test]
+        async fn test_try_getable_path_from_query_result() -> Result<()> {
+            let path = path!("/tmp/file.txt");
+            let display_name = path!("file.txt");
+            let db = MockDatabase::new(DbBackend::Postgres)
+                .append_query_results([[Model {
+                    id: 1,
+                    path: path.clone(),
+                    display_name: Some(display_name.clone()),
+                }]])
+                .into_connection();
+
+            let models = Entity::find().all(&db).await?;
+
+            assert_eq!(models[0].path, path);
+            assert_eq!(models[0].display_name, Some(display_name));
+            Ok(())
+        }
     }
 
     // -----------------------------------------------------------------------
