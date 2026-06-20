@@ -1,5 +1,38 @@
 # Changelog
 
+## v1.4.0
+
+[compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v1.3.0...v1.4.0)
+
+### 🚀 Enhancements
+
+- Add path move operations ([004830d](https://github.com/kiki-kanri/rs-pathkit/commit/004830d))
+- Add file open operations ([a0ea503](https://github.com/kiki-kanri/rs-pathkit/commit/a0ea503))
+
+### 🩹 Fixes
+
+- Resolve clippy warnings ([b4917f3](https://github.com/kiki-kanri/rs-pathkit/commit/b4917f3))
+
+### 🏡 Chore
+
+- Update fmt rules and set lint rules and update rust toolchain nightly date to 26-06-15 ([89d68c4](https://github.com/kiki-kanri/rs-pathkit/commit/89d68c4))
+- Update lint rules ([3cc9417](https://github.com/kiki-kanri/rs-pathkit/commit/3cc9417))
+- Update lint rules ([16550a8](https://github.com/kiki-kanri/rs-pathkit/commit/16550a8))
+- Fmt files ([85ca81f](https://github.com/kiki-kanri/rs-pathkit/commit/85ca81f))
+- Add `--message-format=short --quiet` args into lint and lint-fix command ([2f89d10](https://github.com/kiki-kanri/rs-pathkit/commit/2f89d10))
+- Update cargo alias commands ([e0cf8fe](https://github.com/kiki-kanri/rs-pathkit/commit/e0cf8fe))
+- Update release script ([e63ca60](https://github.com/kiki-kanri/rs-pathkit/commit/e63ca60))
+
+### ✅ Tests
+
+- Move filesystem behavior tests to integration suite ([c00ff87](https://github.com/kiki-kanri/rs-pathkit/commit/c00ff87))
+- Use path macro in unit tests ([81fe4be](https://github.com/kiki-kanri/rs-pathkit/commit/81fe4be))
+- Improve unit coverage ([8c0f75a](https://github.com/kiki-kanri/rs-pathkit/commit/8c0f75a))
+
+### ❤️ Contributors
+
+- Kiki-kanri
+
 ## v1.3.0
 
 [compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v1.2.0...v1.3.0)
