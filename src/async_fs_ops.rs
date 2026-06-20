@@ -13,9 +13,12 @@
 //! let content = path.read().await?;
 //! ```
 
-use std::fs::{
-    Metadata,
-    Permissions,
+use std::{
+    fs::{
+        Metadata,
+        Permissions,
+    },
+    path::Path as StdPath,
 };
 
 use anyhow::Result;
@@ -70,7 +73,7 @@ pub trait AsyncFsOps {
     async fn chmod(&self, mode: u32) -> Result<()>;
     #[cfg(unix)]
     async fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> Result<()>;
-    async fn copy_file(&self, dest: impl AsRef<Path> + Send) -> Result<u64>;
+    async fn copy_file(&self, dest: impl AsRef<StdPath> + Send) -> Result<u64>;
     async fn create_dir_all(&self) -> Result<()>;
     async fn create_dir(&self) -> Result<()>;
     async fn create_parent_dir_all(&self) -> Result<bool>;
@@ -90,6 +93,7 @@ pub trait AsyncFsOps {
     async fn is_socket(&self) -> Result<bool>;
     async fn is_symlink(&self) -> Result<bool>;
     async fn metadata(&self) -> Result<Metadata>;
+    async fn move_to(&self, dest: impl AsRef<StdPath> + Send) -> Result<Path>;
     async fn read_dir(&self) -> Result<ReadDir>;
     async fn read_dir_entries(&self) -> Result<Vec<AsyncPathEntry>>;
     async fn read_dir_names(&self) -> Result<Vec<String>>;
@@ -123,8 +127,8 @@ impl AsyncFsOps for Path {
         Ok(spawn_blocking(move || std::os::unix::fs::chown(path, uid, gid)).await??)
     }
 
-    async fn copy_file(&self, dest: impl AsRef<Path> + Send) -> Result<u64> {
-        Ok(fs::copy(self, dest.as_ref()).await?)
+    async fn copy_file(&self, dest: impl AsRef<StdPath> + Send) -> Result<u64> {
+        Ok(fs::copy(self, dest).await?)
     }
 
     async fn create_dir(&self) -> Result<()> {
@@ -221,6 +225,12 @@ impl AsyncFsOps for Path {
 
     async fn metadata(&self) -> Result<Metadata> {
         Ok(fs::metadata(self).await?)
+    }
+
+    async fn move_to(&self, dest: impl AsRef<StdPath> + Send) -> Result<Path> {
+        let dest = Path::new(dest);
+        fs::rename(self, &dest).await?;
+        Ok(dest)
     }
 
     async fn read(&self) -> Result<Vec<u8>> {

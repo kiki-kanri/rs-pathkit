@@ -80,7 +80,7 @@ impl Path {
     /// let path = Path::new(std::path::Path::new("/test/path"));
     /// ```
     #[inline]
-    pub fn new<P: AsRef<StdPath>>(path: P) -> Self {
+    pub fn new(path: impl AsRef<StdPath>) -> Self {
         Self(path.as_ref().to_path_buf())
     }
 

@@ -112,7 +112,7 @@ impl From<Path> for String {
 /// Allows a `Path` to be used as a `&str` via `AsRef<str>`.
 ///
 /// This is useful for APIs that expect `impl AsRef<str>` rather than
-/// `impl AsRef<Path>`.
+/// a standard path reference.
 ///
 /// # Example
 ///
@@ -197,7 +197,7 @@ mod tests {
         assert_eq!(std_path, StdPath::new("/test/path"));
     }
 
-    // Test AsRef<Path> - check that as_ref returns the path through deref
+    // Test AsRef<StdPath> - check that as_ref returns the path through deref
     #[test]
     fn test_as_ref_self() {
         let path = path!("/test/path");

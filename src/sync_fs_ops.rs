@@ -22,6 +22,7 @@ use std::{
         Permissions,
         ReadDir,
     },
+    path::Path as StdPath,
     time::SystemTime,
 };
 
@@ -73,7 +74,7 @@ pub trait SyncFsOps {
     fn chmod_sync(&self, mode: u32) -> Result<()>;
     #[cfg(unix)]
     fn chown_sync(&self, uid: Option<u32>, gid: Option<u32>) -> Result<()>;
-    fn copy_file_sync(&self, dest: impl AsRef<Path>) -> Result<u64>;
+    fn copy_file_sync(&self, dest: impl AsRef<StdPath>) -> Result<u64>;
     fn create_dir_all_sync(&self) -> Result<()>;
     fn create_dir_sync(&self) -> Result<()>;
     fn create_parent_dir_all_sync(&self) -> Result<bool>;
@@ -81,7 +82,7 @@ pub trait SyncFsOps {
     fn empty_dir_sync(&self) -> Result<()>;
     fn exists_sync(&self) -> Result<bool>;
     fn get_file_size_sync(&self) -> Result<u64>;
-    fn hard_link_sync(&self, link: impl AsRef<Path>) -> Result<()>;
+    fn hard_link_sync(&self, link: impl AsRef<StdPath>) -> Result<()>;
     #[cfg(unix)]
     fn is_block_device_sync(&self) -> Result<bool>;
     #[cfg(unix)]
@@ -94,6 +95,7 @@ pub trait SyncFsOps {
     fn is_socket_sync(&self) -> Result<bool>;
     fn is_symlink_sync(&self) -> Result<bool>;
     fn metadata_sync(&self) -> Result<Metadata>;
+    fn move_to_sync(&self, dest: impl AsRef<StdPath>) -> Result<Path>;
     fn read_dir_entries_sync(&self) -> Result<Vec<PathEntry>>;
     fn read_dir_names_sync(&self) -> Result<Vec<String>>;
     fn read_dir_paths_sync(&self) -> Result<Vec<Path>>;
@@ -108,7 +110,7 @@ pub trait SyncFsOps {
     fn remove_file_sync(&self) -> Result<()>;
     fn set_permissions_sync(&self, permissions: Permissions) -> Result<()>;
     #[cfg(unix)]
-    fn soft_link_sync(&self, link: impl AsRef<Path>) -> Result<()>;
+    fn soft_link_sync(&self, link: impl AsRef<StdPath>) -> Result<()>;
     fn symlink_metadata_sync(&self) -> Result<Metadata>;
     fn touch_sync(&self) -> Result<()>;
     fn truncate_sync(&self, len: Option<u64>) -> Result<()>;
@@ -129,8 +131,8 @@ impl SyncFsOps for Path {
         Ok(std::os::unix::fs::chown(self, uid, gid)?)
     }
 
-    fn copy_file_sync(&self, dest: impl AsRef<Path>) -> Result<u64> {
-        Ok(fs::copy(self, dest.as_ref())?)
+    fn copy_file_sync(&self, dest: impl AsRef<StdPath>) -> Result<u64> {
+        Ok(fs::copy(self, dest)?)
     }
 
     fn create_dir_all_sync(&self) -> Result<()> {
@@ -184,8 +186,8 @@ impl SyncFsOps for Path {
         Ok(self.metadata_sync()?.len())
     }
 
-    fn hard_link_sync(&self, link: impl AsRef<Path>) -> Result<()> {
-        Ok(fs::hard_link(self, link.as_ref())?)
+    fn hard_link_sync(&self, link: impl AsRef<StdPath>) -> Result<()> {
+        Ok(fs::hard_link(self, link)?)
     }
 
     #[cfg(unix)]
@@ -230,6 +232,12 @@ impl SyncFsOps for Path {
 
     fn metadata_sync(&self) -> Result<Metadata> {
         Ok(fs::metadata(self)?)
+    }
+
+    fn move_to_sync(&self, dest: impl AsRef<StdPath>) -> Result<Path> {
+        let dest = Path::new(dest);
+        fs::rename(self, &dest)?;
+        Ok(dest)
     }
 
     fn read_dir_entries_sync(&self) -> Result<Vec<PathEntry>> {
@@ -297,10 +305,10 @@ impl SyncFsOps for Path {
     }
 
     #[cfg(unix)]
-    fn soft_link_sync(&self, link: impl AsRef<Path>) -> Result<()> {
+    fn soft_link_sync(&self, link: impl AsRef<StdPath>) -> Result<()> {
         use std::os::unix::fs::symlink;
 
-        Ok(symlink(self, link.as_ref())?)
+        Ok(symlink(self, link)?)
     }
 
     fn symlink_metadata_sync(&self) -> Result<Metadata> {

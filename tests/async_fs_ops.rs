@@ -538,3 +538,37 @@ async fn test_copy_file() -> Result<()> {
     assert_eq!(content, b"hello world");
     Ok(())
 }
+
+#[tokio::test]
+async fn test_move_to_moves_file() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let src = path!(&temp_dir) / "source.txt";
+    let dest = path!(&temp_dir) / "dest.txt";
+
+    src.write(b"move test").await?;
+    let moved = src.move_to(&dest).await?;
+
+    assert_eq!(moved, dest);
+    assert!(!src.exists().await?);
+    assert!(dest.is_file().await?);
+    assert_eq!(dest.read().await?, b"move test");
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_move_to_moves_dir() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let src = path!(&temp_dir) / "source-dir";
+    let nested = &src / "nested.txt";
+    let dest = path!(&temp_dir) / "dest-dir";
+
+    src.create_dir().await?;
+    nested.write(b"nested").await?;
+    let moved = src.move_to(&dest).await?;
+
+    assert_eq!(moved, dest);
+    assert!(!src.exists().await?);
+    assert!(dest.is_dir().await?);
+    assert_eq!((&dest / "nested.txt").read().await?, b"nested");
+    Ok(())
+}
