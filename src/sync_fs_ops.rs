@@ -27,12 +27,12 @@ use std::{
 
 use anyhow::Result;
 use filetime::{
-    set_file_mtime,
     FileTime,
+    set_file_mtime,
 };
 use serde::{
-    de::DeserializeOwned,
     Serialize,
+    de::DeserializeOwned,
 };
 use serde_json::{
     from_slice,
@@ -335,8 +335,8 @@ impl SyncFsOps for Path {
 mod tests {
     use serde::Deserialize;
     use tempfile::{
-        tempdir,
         NamedTempFile,
+        tempdir,
     };
 
     use super::*;

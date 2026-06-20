@@ -29,6 +29,10 @@
 //! ```
 
 use sea_orm::{
+    ColIdx,
+    QueryResult,
+    TryGetError,
+    TryGetable,
     prelude::*,
     sea_query::{
         ArrayType,
@@ -36,10 +40,6 @@ use sea_orm::{
         ValueType,
         ValueTypeErr,
     },
-    ColIdx,
-    QueryResult,
-    TryGetError,
-    TryGetable,
 };
 
 use crate::Path;
@@ -113,8 +113,8 @@ impl ValueType for Path {
 #[cfg(test)]
 mod tests {
     use tempfile::{
-        tempdir,
         NamedTempFile,
+        tempdir,
     };
 
     use super::*;

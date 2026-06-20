@@ -20,8 +20,8 @@ use std::fs::{
 
 use anyhow::Result;
 use serde::{
-    de::DeserializeOwned,
     Serialize,
+    de::DeserializeOwned,
 };
 use serde_json::{
     from_slice,
@@ -307,8 +307,8 @@ impl AsyncFsOps for Path {
 mod tests {
     use serde::Deserialize;
     use tempfile::{
-        tempdir,
         NamedTempFile,
+        tempdir,
     };
     use tokio::fs as async_fs;
 

@@ -541,10 +541,12 @@ mod tests {
         let path = Path::new("subdir");
         let absolute = path.absolutize_from(format!("{0}base", MAIN_SEPARATOR))?;
         // Check that the result ends with the joined path (handles platform-specific separators)
-        assert!(absolute
-            .to_str()
-            .unwrap()
-            .ends_with(&format!("{}subdir", MAIN_SEPARATOR)));
+        assert!(
+            absolute
+                .to_str()
+                .unwrap()
+                .ends_with(&format!("{}subdir", MAIN_SEPARATOR))
+        );
 
         Ok(())
     }
