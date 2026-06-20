@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.4.1
+
+[compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v1.4.0...v1.4.1)
+
+### 📖 Documentation
+
+- Refresh crate overview ([6fcd182](https://github.com/kiki-kanri/rs-pathkit/commit/6fcd182))
+
+### ❤️ Contributors
+
+- Kiki-kanri
+
 ## v1.4.0
 
 [compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v1.3.0...v1.4.0)
