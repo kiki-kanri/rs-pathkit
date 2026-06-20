@@ -662,6 +662,7 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
 
         // Skip if not root (chown requires root privileges)
+        // SAFETY: `geteuid` has no preconditions and does not dereference pointers.
         if unsafe { libc::geteuid() } != 0 {
             return Ok(());
         }
@@ -917,7 +918,10 @@ mod tests {
         let file = Path::new(temp_dir.path().join("parent").join("file.txt"));
 
         assert!(file.create_parent_dir_sync()?);
-        assert!(file.parent().unwrap().is_dir_sync()?);
+        let parent = file
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("test file path should have a parent"))?;
+        assert!(parent.is_dir_sync()?);
 
         Ok(())
     }
@@ -928,7 +932,10 @@ mod tests {
         let file = Path::new(temp_dir.path().join("nested").join("parent").join("file.txt"));
 
         assert!(file.create_parent_dir_all_sync()?);
-        assert!(file.parent().unwrap().is_dir_sync()?);
+        let parent = file
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("test file path should have a parent"))?;
+        assert!(parent.is_dir_sync()?);
 
         Ok(())
     }

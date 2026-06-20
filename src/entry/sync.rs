@@ -78,7 +78,10 @@ mod tests {
         },
     };
 
-    use anyhow::Result;
+    use anyhow::{
+        Result,
+        anyhow,
+    };
     use tempfile::tempdir;
 
     use super::*;
@@ -89,7 +92,10 @@ mod tests {
         let file_path = dir.path().join("example.txt");
         write(&file_path, b"content")?;
 
-        let entry = read_dir(dir.path())?.next().unwrap()?;
+        let entry = read_dir(dir.path())?
+            .next()
+            .ok_or_else(|| anyhow!("expected one directory entry"))??;
+
         let path_entry = PathEntry::from(entry);
         let path: Path = path_entry.path();
 
@@ -107,7 +113,10 @@ mod tests {
         let file_path = dir.path().join("raw.txt");
         write(&file_path, b"content")?;
 
-        let entry = read_dir(dir.path())?.next().unwrap()?;
+        let entry = read_dir(dir.path())?
+            .next()
+            .ok_or_else(|| anyhow!("expected one directory entry"))??;
+
         let path_entry = PathEntry::from(entry);
         assert_eq!(path_entry.as_dir_entry().path(), file_path);
 

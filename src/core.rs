@@ -290,6 +290,8 @@ mod tests {
         path::MAIN_SEPARATOR,
     };
 
+    use anyhow::anyhow;
+
     use super::*;
 
     #[test]
@@ -363,7 +365,10 @@ mod tests {
     #[test]
     fn test_parent() {
         let path = Path::new("/base/subdir/file.txt");
-        assert_eq!(path.parent().unwrap().to_str(), Some("/base/subdir"));
+        assert_eq!(
+            path.parent().and_then(|parent| parent.to_str().map(str::to_owned)),
+            Some(String::from("/base/subdir"))
+        );
 
         // Test root path
         let path = Path::new("/");
@@ -544,8 +549,7 @@ mod tests {
         assert!(
             absolute
                 .to_str()
-                .unwrap()
-                .ends_with(&format!("{}subdir", MAIN_SEPARATOR))
+                .is_some_and(|path| path.ends_with(&format!("{}subdir", MAIN_SEPARATOR)))
         );
 
         Ok(())
@@ -556,7 +560,10 @@ mod tests {
         let path = Path::new("subdir/file.txt");
         let absolute = path.absolutize_virtually("/virtual")?;
         // Check that the result contains the virtual root and subdir (handles platform-specific separators)
-        let abs_str = absolute.to_str().unwrap();
+        let abs_str = absolute
+            .to_str()
+            .ok_or_else(|| anyhow!("absolute path should be valid UTF-8"))?;
+
         assert!(abs_str.contains("virtual"));
         assert!(abs_str.contains("subdir"));
         assert!(abs_str.contains("file.txt"));

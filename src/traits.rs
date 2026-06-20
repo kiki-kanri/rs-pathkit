@@ -126,9 +126,10 @@ impl From<Path> for String {
 impl AsRef<str> for Path {
     #[inline]
     fn as_ref(&self) -> &str {
-        // to_string_lossy() always returns Some because we don't check for lossy conversion
-        // The unwrap is safe: to_string_lossy() never panics, only returns Owned
-        self.to_str().unwrap()
+        match self.to_str() {
+            Some(path) => path,
+            None => panic!("Path contains non-UTF-8 data and cannot be borrowed as str"),
+        }
     }
 }
 
@@ -431,6 +432,6 @@ mod tests {
     fn test_path_has_content() {
         let path = Path::new("/test/path");
         // Just verify the path string is not empty
-        assert!(!path.to_str().unwrap().is_empty());
+        assert!(path.to_str().is_some_and(|path| !path.is_empty()));
     }
 }

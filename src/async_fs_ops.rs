@@ -305,6 +305,7 @@ impl AsyncFsOps for Path {
 
 #[cfg(test)]
 mod tests {
+    use anyhow::anyhow;
     use serde::Deserialize;
     use tempfile::{
         NamedTempFile,
@@ -583,7 +584,7 @@ mod tests {
         let paths: Vec<_> = entries.iter().map(AsyncPathEntry::path).collect();
         let path_strings: Vec<_> = paths
             .iter()
-            .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
+            .filter_map(|p| p.file_name().map(|name| name.to_string_lossy().to_string()))
             .collect();
 
         assert!(path_strings.contains(&"file1.txt".to_string()));
@@ -631,7 +632,11 @@ mod tests {
         let file = Path::new(temp_dir.path().join("parent").join("file.txt"));
 
         assert!(file.create_parent_dir().await?);
-        assert!(file.parent().unwrap().is_dir().await?);
+        let parent = file
+            .parent()
+            .ok_or_else(|| anyhow!("test file path should have a parent"))?;
+
+        assert!(parent.is_dir().await?);
 
         Ok(())
     }
@@ -642,7 +647,11 @@ mod tests {
         let file = Path::new(temp_dir.path().join("nested").join("parent").join("file.txt"));
 
         assert!(file.create_parent_dir_all().await?);
-        assert!(file.parent().unwrap().is_dir().await?);
+        let parent = file
+            .parent()
+            .ok_or_else(|| anyhow!("test file path should have a parent"))?;
+
+        assert!(parent.is_dir().await?);
 
         Ok(())
     }
@@ -741,6 +750,7 @@ mod tests {
         };
 
         // Skip if not root (chown requires root privileges)
+        // SAFETY: `geteuid` has no preconditions and does not dereference pointers.
         if unsafe { libc::geteuid() } != 0 {
             return Ok(());
         }

@@ -72,7 +72,10 @@ impl AsyncPathEntry {
 mod tests {
     use std::ffi::OsString;
 
-    use anyhow::Result;
+    use anyhow::{
+        Result,
+        anyhow,
+    };
     use tempfile::tempdir;
     use tokio::fs::{
         read_dir,
@@ -88,7 +91,11 @@ mod tests {
         write(&file_path, b"content").await?;
 
         let mut entries = read_dir(dir.path()).await?;
-        let entry = entries.next_entry().await?.unwrap();
+        let entry = entries
+            .next_entry()
+            .await?
+            .ok_or_else(|| anyhow!("expected one async directory entry"))?;
+
         let path_entry = AsyncPathEntry::from(entry);
         let path: Path = path_entry.path();
 
@@ -107,7 +114,11 @@ mod tests {
         write(&file_path, b"content").await?;
 
         let mut entries = read_dir(dir.path()).await?;
-        let entry = entries.next_entry().await?.unwrap();
+        let entry = entries
+            .next_entry()
+            .await?
+            .ok_or_else(|| anyhow!("expected one async directory entry"))?;
+
         let path_entry = AsyncPathEntry::from(entry);
         assert_eq!(path_entry.as_dir_entry().path(), file_path);
 

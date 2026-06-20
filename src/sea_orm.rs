@@ -83,10 +83,10 @@ impl TryGetable for Path {
 
 impl ValueType for Path {
     fn try_from(v: Value) -> Result<Self, ValueTypeErr> {
-        match v {
-            Value::String(Some(s)) => Ok(Self::new(s.as_str())),
-            Value::String(None) => Err(ValueTypeErr),
-            _ => Err(ValueTypeErr),
+        if let Value::String(Some(s)) = v {
+            Ok(Self::new(s.as_str()))
+        } else {
+            Err(ValueTypeErr)
         }
     }
 
@@ -111,7 +111,11 @@ impl ValueType for Path {
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
+    use anyhow::{
+        Result,
+        anyhow,
+    };
     use tempfile::{
         NamedTempFile,
         tempdir,
@@ -123,9 +127,8 @@ mod tests {
     // Compile-check models using DeriveEntityModel with Path fields
     // -------------------------------------------------------------------
 
-    mod file_model {
-        use sea_orm::entity::*;
-
+    #[allow(unreachable_pub)]
+    pub(crate) mod file_model {
         use super::*;
 
         #[derive(Clone, Debug, DeriveEntityModel)]
@@ -147,9 +150,8 @@ mod tests {
     // Entity with multiple Path fields
     // -----------------------------------------------------------------------
 
-    mod asset_model {
-        use sea_orm::entity::*;
-
+    #[allow(unreachable_pub)]
+    pub(crate) mod asset_model {
         use super::*;
 
         #[derive(Clone, Debug, DeriveEntityModel)]
@@ -173,14 +175,15 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn test_into_value_roundtrip_tempdir() {
-        let temp_dir = tempdir().unwrap();
+    fn test_into_value_roundtrip_tempdir() -> Result<()> {
+        let temp_dir = tempdir()?;
         let path = Path::new(temp_dir.path());
 
         // Path -> Value -> Path roundtrip
         let value: Value = path.clone().into();
-        let recovered = <Path as ValueType>::try_from(value).unwrap();
+        let recovered = <Path as ValueType>::try_from(value).map_err(|_| anyhow!("failed to recover path value"))?;
         assert_eq!(recovered.to_str(), path.to_str());
+        Ok(())
     }
 
     #[test]
@@ -211,18 +214,21 @@ mod tests {
     }
 
     #[test]
-    fn test_path_with_unicode() {
-        let temp_dir = tempdir().unwrap();
+    fn test_path_with_unicode() -> Result<()> {
+        let temp_dir = tempdir()?;
         let path = Path::new(temp_dir.path().join("文件/日本語.txt"));
 
         let value: Value = path.clone().into();
-        let recovered = <Path as ValueType>::try_from(value).unwrap();
+        let recovered =
+            <Path as ValueType>::try_from(value).map_err(|_| anyhow!("failed to recover unicode path value"))?;
+
         assert_eq!(recovered.to_str(), path.to_str());
+        Ok(())
     }
 
     #[test]
-    fn test_into_value_named_temp_file() {
-        let temp_file = NamedTempFile::new().unwrap();
+    fn test_into_value_named_temp_file() -> Result<()> {
+        let temp_file = NamedTempFile::new()?;
         let path = Path::new(temp_file.path());
 
         let value: Value = path.clone().into();
@@ -230,6 +236,8 @@ mod tests {
             matches!(value, Value::String(Some(_))),
             "expected Value::String(Some(...)), got {value:?}"
         );
+
+        Ok(())
     }
 
     // -------------------------------------------------------------------
