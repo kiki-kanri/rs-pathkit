@@ -1,131 +1,116 @@
 //! # pathkit
 //!
 //! A Rust library that provides a `Path` structure similar to Python's pathlib,
-//! with both synchronous and asynchronous file manipulation methods.
+//! with synchronous and optional asynchronous file manipulation methods.
 //!
 //! ## Features
 //!
-//! - **Path Operations**: Extended path manipulation methods beyond `std::path::Path`
-//! - **Synchronous I/O**: Blocking file system operations via [`SyncFsOps`] trait
-//! - **Asynchronous I/O**: Non-blocking file system operations via `AsyncFsOps` trait (requires `async-fs-ops` feature)
-//! - **SeaORM Integration**: Use `Path` as a model field (requires `sea-orm` feature)
-//! - **Serde Support**: Serialize and deserialize Path with `#[derive(Serialize, Deserialize)]`
-//! - **Path Joining**: Use `/` operator for intuitive path composition
-//! - **Path Macro**: Use [`path!`] for `format!`-style `Path` construction
+//! - 🧭 **Path Operations**: pathlib-style [`Path`] wrapper around `std::path::PathBuf`
+//! - 🧩 **Path Macro**: [`path!`] supports direct path expressions and `format!`-style construction
+//! - ➗ **Path Joining**: use `/` for concise path composition
+//! - 📁 **Synchronous I/O**: blocking file system operations via [`SyncFsOps`]
+//! - ⚡ **Asynchronous I/O**: non-blocking file system operations via `AsyncFsOps` (requires `async-fs-ops`)
+//! - 🔄 **Serde Support**: serialize and deserialize [`Path`]
+//! - 🗄️ **SeaORM Integration**: use [`Path`] as a model field (requires `sea-orm`)
 //!
 //! ## Installation
 //!
-//! Add to your `Cargo.toml`:
-//!
 //! ```bash
 //! cargo add pathkit
-//! ```
-//!
-//! For async support:
-//!
-//! ```bash
 //! cargo add pathkit --features async-fs-ops
-//! ```
-//!
-//! For SeaORM support:
-//!
-//! ```bash
 //! cargo add pathkit --features sea-orm
+//! cargo add pathkit --features full
 //! ```
 //!
-//! ## Usage
-//!
-//! ### Basic Path Operations
+//! ## Basic Path Operations
 //!
 //! ```rust
-//! use pathkit::Path;
+//! use pathkit::path;
 //!
-//! // Create a new path
-//! let path = Path::new("/home/user/project");
+//! let root = path!("/home/{}/project", "user");
+//! let config = &root / "config" / "app.json";
 //!
-//! // Join paths
-//! let config = path.join("config.json");
+//! // `join` is still available for std-like APIs.
+//! let readme = root.join("README.md");
 //!
-//! // Using / operator (note: this consumes the path)
-//! let nested = Path::new("/home/user") / "project" / "subdir";
-//!
-//! // Use path! for format-style construction
-//! let user = "user";
-//! let config = pathkit::path!("/home/{user}/{}", "config.json");
-//!
-//! // Get path components
-//! let parent = path.parent();
-//! let file_name = path.file_name();
-//! let extension = path.extension();
+//! let parent = config.parent();
+//! let file_name = config.file_name();
+//! let extension = config.extension();
 //! ```
 //!
-//! ### Synchronous File Operations
+//! ## Synchronous File Operations
 //!
 //! ```rust,ignore
-//! use pathkit::{Path, SyncFsOps};
+//! use pathkit::{
+//!     SyncFsOps,
+//!     path
+//! };
 //!
-//! let path = Path::new("/tmp/test.txt");
+//! let path = path!("/tmp/test.txt");
 //!
-//! // Read/write files
 //! path.write_sync(b"Hello, world!")?;
 //! let content = path.read_sync()?;
+//! let file = path.open_sync()?;
 //!
-//! // Check existence and type
 //! if path.exists_sync()? {
 //!     println!("File size: {}", path.get_file_size_sync()?);
 //! }
 //!
-//! // Create directories
-//! Path::new("/tmp/new_project").create_dir_all_sync()?;
-//!
-//! // Read JSON
-//! #[derive(Deserialize)]
-//! struct Config { name: String }
-//! let config: Config = path.read_json_sync()?;
+//! let moved = path.move_to_sync("/tmp/moved.txt")?;
+//! let config: Config = moved.read_json_sync()?;
 //! ```
 //!
-//! ### Asynchronous File Operations
+//! Use `open_with_options_sync()` when you need custom `std::fs::OpenOptions`.
+//!
+//! ## Asynchronous File Operations
+//!
+//! Requires the `async-fs-ops` feature.
 //!
 //! ```rust,ignore
-//! use pathkit::{Path, AsyncFsOps};
+//! use pathkit::{
+//!     AsyncFsOps,
+//!     path
+//! };
 //!
-//! let path = Path::new("/tmp/test.txt");
+//! let path = path!("/tmp/test.txt");
 //!
-//! // Async read/write
 //! path.write(b"Hello, world!").await?;
 //! let content = path.read().await?;
+//! let file = path.open().await?;
 //!
-//! // Async directory operations
-//! Path::new("/tmp/new_project").create_dir_all().await?;
+//! path.create_parent_dir_all().await?;
+//! let moved = path.move_to("/tmp/moved.txt").await?;
 //! ```
 //!
-//! ### SeaORM Integration
+//! Use `open_with_options()` when you need custom `tokio::fs::OpenOptions`.
 //!
-//! ```rust,ignore
-//! use sea_orm::entity::prelude::*;
-//! use pathkit::Path;
+//! ## SeaORM Integration
 //!
-//! #[derive(Clone, Debug, DeriveEntityModel)]
-//! #[sea_orm(table_name = "files")]
-//! struct Model {
-//!     #[sea_orm(primary_key)]
-//!     id: i32,
-//!     path: Path,
-//! }
-//! ```
+//! Requires the `sea-orm` feature. [`Path`] is stored as `String` and can be used
+//! directly in SeaORM models. Implemented SeaORM traits: `Into<Value>`,
+//! `ValueType`, `Nullable`, and `TryGetable`.
 //!
 //! ## Feature Flags
 //!
 //! | Feature | Description |
 //! |---------|-------------|
-//! | `async-fs-ops` | Enable async file system operations (requires tokio) |
-//! | `sea-orm` | Enable SeaORM integration for using `Path` as a model field |
-//! | `full` | Enable all features |
+//! | `async-fs-ops` | Enable async file system operations via tokio |
+//! | `sea-orm` | Enable SeaORM value/model integration |
+//! | `all` | Enable all optional features |
+//! | `full` | Alias of `all` |
 //!
-//! ## Platform Support
+//! ## API Overview
 //!
-//! - **Unix/Linux/macOS**: Full support including `chmod`, `chown`, and special file type checks
-//! - **Windows**: Core functionality supported; some Unix-specific features are conditionally compiled out
+//! Main entry points:
+//!
+//! - [`Path`] — owned path wrapper around `std::path::PathBuf`
+//! - [`path!`] — convenient path construction macro
+//! - `/` operator — concise path composition
+//! - [`SyncFsOps`] — blocking filesystem operations
+//! - `AsyncFsOps` — async filesystem operations with tokio
+//! - [`PathEntry`] / `AsyncPathEntry` — typed directory entries
+//!
+//! See each item’s rustdoc for the complete method list.
 
 #[cfg(feature = "async-fs-ops")]
 mod async_fs_ops;

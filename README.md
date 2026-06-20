@@ -11,12 +11,13 @@ A Rust library that provides a `Path` structure similar to Python's pathlib, wit
 
 ## Features
 
-- **Path Operations**: Extended path manipulation methods beyond `std::path::Path`
-- **Synchronous I/O**: Blocking file system operations via `SyncFsOps` trait
-- **Asynchronous I/O**: Non-blocking file system operations via `AsyncFsOps` trait (requires `async-fs-ops` feature)
-- **Serde Support**: Serialize and deserialize Path with `#[derive(Serialize, Deserialize)]`
-- **Path Joining**: Use `/` operator for intuitive path composition
-- **Path Macro**: Use `path!` for `format!`-style `Path` construction
+- 🧭 **Path Operations**: pathlib-style `Path` wrapper around `std::path::PathBuf`
+- 🧩 **Path Macro**: `path!` supports direct path expressions and `format!`-style construction
+- ➗ **Path Joining**: use `/` for concise path composition
+- 📁 **Synchronous I/O**: blocking file system operations via `SyncFsOps`
+- ⚡ **Asynchronous I/O**: non-blocking file system operations via `AsyncFsOps` (requires `async-fs-ops`)
+- 🔄 **Serde Support**: serialize and deserialize `Path`
+- 🗄️ **SeaORM Integration**: use `Path` as a model field (requires `sea-orm`)
 
 ## Installation
 
@@ -26,10 +27,12 @@ Add to your `Cargo.toml`:
 cargo add pathkit
 ```
 
-For async support:
+Optional features:
 
 ```bash
 cargo add pathkit --features async-fs-ops
+cargo add pathkit --features sea-orm
+cargo add pathkit --features full
 ```
 
 ## Usage
@@ -37,68 +40,72 @@ cargo add pathkit --features async-fs-ops
 ### Basic Path Operations
 
 ```rust
-use pathkit::Path;
+use pathkit::path;
 
-// Create a new path
-let path = Path::new("/home/user/project");
+let root = path!("/home/{}/project", "user");
+let config = &root / "config" / "app.json";
 
-// Join paths
-let config = path.join("config.json");
-let nested = path / "subdir" / "file.txt";  // Using / operator
+// `join` is still available for std-like APIs.
+let readme = root.join("README.md");
 
-// Path components
-let parent = path.parent();
-let file_name = path.file_name();
-let extension = path.extension();
+let parent = config.parent();
+let file_name = config.file_name();
+let extension = config.extension();
 ```
 
 ### Synchronous File Operations
 
 ```rust
-use pathkit::{Path, SyncFsOps};
+use pathkit::{
+    SyncFsOps,
+    path
+};
 
-let path = Path::new("/tmp/test.txt");
+let path = path!("/tmp/test.txt");
 
-// Read/write files
 path.write_sync(b"Hello, world!")?;
 let content = path.read_sync()?;
+let file = path.open_sync()?;
 
-// Check existence and type
 if path.exists_sync()? {
     println!("File size: {}", path.get_file_size_sync()?);
 }
 
-// Create directories
-Path::new("/tmp/new_project").create_dir_all_sync()?;
-
-// Read JSON
-#[derive(Deserialize)]
-struct Config { name: String }
-let config: Config = path.read_json_sync()?;
+let moved = path.move_to_sync("/tmp/moved.txt")?;
+let config: Config = moved.read_json_sync()?;
 ```
 
-### Asynchronous File Operations (with `async-fs-ops` feature)
+Use `open_with_options_sync()` when you need custom `std::fs::OpenOptions`.
+
+### Asynchronous File Operations
+
+Requires the `async-fs-ops` feature.
 
 ```rust
-use pathkit::{Path, AsyncFsOps};
+use pathkit::{
+    AsyncFsOps,
+    path
+};
 
-let path = Path::new("/tmp/test.txt");
+let path = path!("/tmp/test.txt");
 
-// Async read/write
 path.write(b"Hello, world!").await?;
 let content = path.read().await?;
+let file = path.open().await?;
 
-// Async directory operations
-Path::new("/tmp/new_project").create_dir_all().await?;
+path.create_parent_dir_all().await?;
+let moved = path.move_to("/tmp/moved.txt").await?;
 ```
 
-### SeaORM Integration (with `sea-orm` feature)
+Use `open_with_options()` when you need custom `tokio::fs::OpenOptions`.
 
-When the `sea-orm` feature is enabled, `Path` can be used directly as a field type in SeaORM models:
+### SeaORM Integration
+
+Requires the `sea-orm` feature. `Path` is stored as `String` and can be used directly in SeaORM models:
 
 ```rust
-use sea_orm::entity::prelude::*;
 use pathkit::Path;
+use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, DeriveEntityModel)]
 #[sea_orm(table_name = "files")]
@@ -106,72 +113,38 @@ struct Model {
     #[sea_orm(primary_key)]
     id: i32,
     path: Path,
+    display_name: Option<Path>,
 }
 ```
 
-The following traits are implemented for SeaORM integration:
-- `Into<Value>` — enables `ActiveValue::Set(Path(...))` and query parameters
-- `ValueType` — describes the column type to the schema machinery
-- `Nullable` — enables `Option<Path>` in models
-- `TryGetable` — enables reading `Path` from query results
-
-`Path` is stored as `String` in the database.
+Implemented SeaORM traits: `Into<Value>`, `ValueType`, `Nullable`, and `TryGetable`.
 
 ## Feature Flags
 
 | Feature | Description |
 |---------|-------------|
-| `async-fs-ops` | Enable async file system operations (requires tokio) |
-| `sea-orm` | Enable SeaORM integration for using `Path` as a model field |
-| `full` | Enable all features |
+| `async-fs-ops` | Enable async file system operations via tokio |
+| `sea-orm` | Enable SeaORM value/model integration |
+| `all` | Enable all optional features |
+| `full` | Alias of `all` |
 
 ## Platform Support
 
-- **Unix/Linux/macOS**: Full support including `chmod`, `chown`, and special file type checks
-- **Windows**: Core functionality supported; some Unix-specific features are conditionally compiled out
+- **Unix/Linux/macOS**: full support including `chmod`, `chown`, and special file type checks
+- **Windows**: core functionality supported; Unix-specific APIs are conditionally compiled out
 
 ## API Overview
 
-### Core Path Methods
-- `new()`, `join()`, `parent()`, `with_file_name()`, `with_extension()`, `with_added_extension()`
-- `absolutize()`, `absolutize_from()`, `absolutize_virtually()`
-- `canonicalize()`
-- `is_absolute()`, `is_relative()`
+Main entry points:
 
-### File System Operations (SyncFsOps)
-- `exists_sync()`, `is_file_sync()`, `is_dir_sync()`, `is_symlink_sync()`
-- `read_sync()`, `write_sync()`, `read_to_string_sync()`
-- `read_json_sync()`, `write_json_sync()`
-- `create_dir_sync()`, `create_dir_all_sync()`, `remove_dir_sync()`
-- `remove_file_sync()`, `remove_dir_all_sync()`
-- `metadata_sync()`, `get_file_size_sync()`, `truncate_sync()`
-- `set_permissions_sync()`, `read_dir_sync()`, `read_dir_entries_sync()`, `read_dir_names_sync()`, `read_dir_paths_sync()`, `empty_dir_sync()`
-- `chmod_sync()`, `chown_sync()` (Unix only)
-- `is_block_device_sync()`, `is_char_device_sync()`, `is_fifo_sync()`, `is_socket_sync()` (Unix only)
-- `copy_file_sync()`, `hard_link_sync()`, `soft_link_sync()`
-- `read_link_sync()`, `symlink_metadata_sync()`
-- `touch_sync()`
+- `Path` — owned path wrapper around `std::path::PathBuf`
+- `path!` — convenient path construction macro
+- `/` operator — concise path composition
+- `SyncFsOps` — blocking filesystem operations
+- `AsyncFsOps` — async filesystem operations with tokio
+- `PathEntry` / `AsyncPathEntry` — typed directory entries
 
-### Trait Implementations
-`Path` implements a rich set of standard library traits for interoperability:
-- `AsRef<Path>` / `AsRef<PathBuf>` / `AsRef<OsStr>` / `AsRef<str>` — use `Path` wherever these types are expected
-- `Borrow<Path>` — use `Path` as a map key with `std::collections` hash types
-- `Deref<Target = Path>` — transparent access to `std::path::Path` methods
-- `Display` / `Debug` / `Serialize` / `Deserialize` — string-like and serde support
-- `From<&str>` / `From<&Path>` / `From<String>` / `From<Path> for String` — seamless conversions
-- `Div<&str>` / `Div<String>` / `Div<&String>` / `Div<&Path>` / `Div<Path>` — use `/` operator: `path / "subdir"`
-
-### File System Operations (AsyncFsOps)
-Same operations as SyncFsOps but async:
-- `exists()`, `is_file()`, `is_dir()`, `is_symlink()`
-- `read()`, `write()`, `read_to_string()`
-- `read_json()`, `write_json()`
-- `create_dir()`, `create_dir_all()`, `remove_dir()`
-- `remove_file()`, `remove_dir_all()`
-- `metadata()`, `get_file_size()`, `truncate()`
-- `set_permissions()`, `read_dir()`, `read_dir_entries()`, `read_dir_names()`, `read_dir_paths()`, `empty_dir()`
-- `chmod()`, `chown()` (Unix only)
-- `is_block_device()`, `is_char_device()`, `is_fifo()`, `is_socket()` (Unix only)
+See [docs.rs](https://docs.rs/pathkit) for the complete method list.
 
 ## License
 
