@@ -1,7 +1,7 @@
 [package]
 name = "pathkit"
 version = "1.4.1"
-edition = "2021"
+edition = "2024"
 
 description = "Similar to the Path structure provided by python's pathlib, it provides various async/sync versions of file manipulation methods in addition to some of the std::Path built-in methods."
 # documentation = "https://docs.rs/crate-name"
@@ -129,14 +129,14 @@ sea-orm = ["dep:sea-orm"]
 # =============================================================================
 
 [dependencies]
-anyhow = "1.0.102"
-async-trait = { version = "0.1.89", optional = true }
+anyhow = "1.0.104"
+async-trait = { version = "0.1.91", optional = true }
 filetime = "0.2.29"
-path-absolutize = "3.1.1"
+path-absolutize = "4.0.1"
 sea-orm = { version = "1.1.20", optional = true }
-serde = { version = "1.0.228", features = ["derive"] }
+serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.150"
-tokio = { version = "1.52.3", features = ["fs", "rt", "io-util"], optional = true }
+tokio = { version = "1.53.0", features = ["fs", "rt", "io-util"], optional = true }
 
 # -----------------------------------------------------------------------------
 # OS / family-specific dependencies
@@ -261,7 +261,7 @@ tokio = { version = "1.52.3", features = ["fs", "rt", "io-util"], optional = tru
 libc = "0.2.186"
 sea-orm = { version = "1.1.20", features = ["mock"] }
 tempfile = "3.27.0"
-tokio = { version = "1.52.3", features = ["macros"] }
+tokio = { version = "1.53.0", features = ["macros"] }
 
 # -----------------------------------------------------------------------------
 # Target-specific development dependencies

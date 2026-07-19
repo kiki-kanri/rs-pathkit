@@ -113,7 +113,7 @@ impl Path {
     /// let absolute = path.absolutize_from("/custom/cwd")?;
     /// ```
     pub fn absolutize_from(&self, cwd: impl AsRef<StdPath>) -> Result<Self> {
-        Ok(Self::new(self.0.absolutize_from(cwd)?))
+        Ok(Self::new(self.0.absolutize_from(cwd)))
     }
 
     /// Converts a relative path to an absolute path with a virtual root.
