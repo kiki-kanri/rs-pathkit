@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.4.2
+
+[compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v1.4.1...v1.4.2)
+
+### 🩹 Fixes
+
+- **scripts:** Preserve wrapper script context ([bd61b95](https://github.com/kiki-kanri/rs-pathkit/commit/bd61b95))
+
+### 🏡 Chore
+
+- Update example `Cargo.toml` ([0b12d63](https://github.com/kiki-kanri/rs-pathkit/commit/0b12d63))
+- Bump toolchain channel to `nightly-2026-07-01` ([5b78b02](https://github.com/kiki-kanri/rs-pathkit/commit/5b78b02))
+- Bump toolchain channel to `nightly-2026-07-15` ([9af4542](https://github.com/kiki-kanri/rs-pathkit/commit/9af4542))
+- Sync public script libs ([59c2783](https://github.com/kiki-kanri/rs-pathkit/commit/59c2783))
+- Adopt Rust 2024 and update dependencies ([acdf656](https://github.com/kiki-kanri/rs-pathkit/commit/acdf656))
+
+### ❤️ Contributors
+
+- Kiki-kanri
+
 ## v1.4.1
 
 [compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v1.4.0...v1.4.1)

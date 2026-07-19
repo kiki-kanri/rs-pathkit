@@ -1,6 +1,6 @@
 [package]
 name = "pathkit"
-version = "1.4.1"
+version = "1.4.2"
 edition = "2024"
 
 description = "Similar to the Path structure provided by python's pathlib, it provides various async/sync versions of file manipulation methods in addition to some of the std::Path built-in methods."
