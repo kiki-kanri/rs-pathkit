@@ -143,9 +143,10 @@ mod tests {
     fn test_div_preserves_original_path() {
         let original = path!("/test/path");
 
-        let _owned_result = original.clone() / "subpath";
-        let _borrowed_result = &original / "subpath";
+        let owned_result = original.clone() / "subpath";
+        let borrowed_result = &original / "subpath";
 
+        assert_eq!(owned_result, borrowed_result);
         assert_eq!(original, path!("/test/path"));
     }
 }

@@ -182,6 +182,7 @@ impl Path {
     /// assert_eq!(joined.to_str(), Some(format!("{0}base{0}subdir{0}file.txt", MAIN_SEPARATOR).as_str()));
     /// ```
     #[inline]
+    #[must_use]
     pub fn join(&self, path: impl AsRef<StdPath>) -> Self {
         Self::new(self.0.join(path))
     }
@@ -237,6 +238,7 @@ impl Path {
     /// assert_eq!(path.with_added_extension("1").to_str(), Some("/path/to/app.log.1"));
     /// ```
     #[inline]
+    #[must_use]
     pub fn with_added_extension<S: AsRef<OsStr>>(&self, extension: S) -> Self {
         Self::new(self.0.with_added_extension(extension))
     }
@@ -257,6 +259,7 @@ impl Path {
     /// assert_eq!(path.with_extension("txt").to_str(), Some("/path/to/file.txt"));
     /// ```
     #[inline]
+    #[must_use]
     pub fn with_extension<S: AsRef<OsStr>>(&self, extension: S) -> Self {
         Self::new(self.0.with_extension(extension))
     }
@@ -277,6 +280,7 @@ impl Path {
     /// assert_eq!(path.with_file_name("other.md").to_str(), Some(expected.as_str()));
     /// ```
     #[inline]
+    #[must_use]
     pub fn with_file_name<S: AsRef<OsStr>>(&self, file_name: S) -> Self {
         Self::new(self.0.with_file_name(file_name))
     }
@@ -348,20 +352,20 @@ mod tests {
         let path = path!("{MAIN_SEPARATOR}base");
         assert_eq!(
             path.join("subdir").to_str(),
-            Some(format!("{0}base{0}subdir", MAIN_SEPARATOR).as_str())
+            Some(format!("{MAIN_SEPARATOR}base{MAIN_SEPARATOR}subdir").as_str())
         );
 
         // On Windows, join doesn't treat "/" as separator, so we use sep for proper path construction
         assert_eq!(
-            path.join(format!("subdir{0}file.txt", MAIN_SEPARATOR)).to_str(),
-            Some(format!("{0}base{0}subdir{0}file.txt", MAIN_SEPARATOR).as_str())
+            path.join(format!("subdir{MAIN_SEPARATOR}file.txt")).to_str(),
+            Some(format!("{MAIN_SEPARATOR}base{MAIN_SEPARATOR}subdir{MAIN_SEPARATOR}file.txt").as_str())
         );
 
         // Join with Path
         let subpath = path!("subpath");
         assert_eq!(
             path.join(subpath).to_str(),
-            Some(format!("{0}base{0}subpath", MAIN_SEPARATOR).as_str())
+            Some(format!("{MAIN_SEPARATOR}base{MAIN_SEPARATOR}subpath").as_str())
         );
     }
 
@@ -543,12 +547,12 @@ mod tests {
     #[test]
     fn test_absolutize_from() -> Result<()> {
         let path = path!("subdir");
-        let absolute = path.absolutize_from(format!("{0}base", MAIN_SEPARATOR))?;
+        let absolute = path.absolutize_from(format!("{MAIN_SEPARATOR}base"))?;
         // Check that the result ends with the joined path (handles platform-specific separators)
         assert!(
             absolute
                 .to_str()
-                .is_some_and(|path| path.ends_with(&format!("{}subdir", MAIN_SEPARATOR)))
+                .is_some_and(|path| path.ends_with(&format!("{MAIN_SEPARATOR}subdir")))
         );
 
         Ok(())
@@ -582,7 +586,7 @@ mod tests {
     #[test]
     fn test_display() {
         let path = path!("/test/path");
-        assert_eq!(format!("{}", path), "/test/path");
+        assert_eq!(format!("{path}"), "/test/path");
     }
 
     #[test]

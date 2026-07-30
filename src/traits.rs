@@ -174,7 +174,6 @@ mod tests {
     use std::{
         borrow::Borrow,
         ffi::OsStr,
-        ops::Deref,
         path::{
             Path as StdPath,
             PathBuf,
@@ -191,7 +190,7 @@ mod tests {
 
         let as_ref: &StdPath = path.as_ref();
         let borrowed: &StdPath = path.borrow();
-        let dereferenced: &StdPath = path.deref();
+        let dereferenced: &StdPath = &path;
 
         assert_eq!(as_ref, expected);
         assert_eq!(borrowed, expected);
@@ -203,7 +202,7 @@ mod tests {
         let path = path!("/test/path");
 
         assert_eq!(path.to_string(), "/test/path");
-        assert_eq!(format!("{}", path), "/test/path");
+        assert_eq!(format!("{path}"), "/test/path");
         assert_eq!(format!("Path: {}", path!("file.txt")), "Path: file.txt");
     }
 

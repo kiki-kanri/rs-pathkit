@@ -1,4 +1,4 @@
-//! SeaORM integration for [`Path`].
+//! `SeaORM` integration for [`Path`].
 //!
 //! `Path` is stored as `String` in the database.
 //! The following traits are implemented to allow `Path` as a model field:
@@ -273,14 +273,14 @@ pub(crate) mod tests {
         use file_model::Entity as FileEntity;
 
         // Column enum variant exists and is accessible — compile-check only
-        let _col = <FileEntity as EntityTrait>::Column::Path;
+        let _ = <FileEntity as EntityTrait>::Column::Path;
     }
 
     #[test]
     fn test_file_model_option_path_column_is_string() {
         use file_model::Entity as FileEntity;
 
-        let _col = <FileEntity as EntityTrait>::Column::DisplayName;
+        let _ = <FileEntity as EntityTrait>::Column::DisplayName;
     }
 
     #[test]

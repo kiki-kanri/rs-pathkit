@@ -11,7 +11,7 @@
 //! - 📁 **Synchronous I/O**: blocking file system operations via [`SyncFsOps`]
 //! - ⚡ **Asynchronous I/O**: non-blocking file system operations via `AsyncFsOps` (requires `async-fs-ops`)
 //! - 🔄 **Serde Support**: serialize and deserialize [`Path`]
-//! - 🗄️ **SeaORM Integration**: use [`Path`] as a model field (requires `sea-orm`)
+//! - 🗄️ **`SeaORM` Integration**: use [`Path`] as a model field (requires `sea-orm`)
 //!
 //! ## Installation
 //!
@@ -84,10 +84,10 @@
 //!
 //! Use `open_with_options()` when you need custom `tokio::fs::OpenOptions`.
 //!
-//! ## SeaORM Integration
+//! ## `SeaORM` Integration
 //!
 //! Requires the `sea-orm` feature. [`Path`] is stored as `String` and can be used
-//! directly in SeaORM models. Implemented SeaORM traits: `Into<Value>`,
+//! directly in `SeaORM` models. Implemented `SeaORM` traits: `Into<Value>`,
 //! `ValueType`, `Nullable`, and `TryGetable`.
 //!
 //! ## Feature Flags
@@ -95,7 +95,7 @@
 //! | Feature | Description |
 //! |---------|-------------|
 //! | `async-fs-ops` | Enable async file system operations via tokio |
-//! | `sea-orm` | Enable SeaORM value/model integration |
+//! | `sea-orm` | Enable `SeaORM` value/model integration |
 //! | `all` | Enable all optional features |
 //! | `full` | Alias of `all` |
 //!
