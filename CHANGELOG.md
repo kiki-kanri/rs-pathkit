@@ -1,5 +1,36 @@
 # Changelog
 
+## v1.4.3
+
+[compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v1.4.2...v1.4.3)
+
+### 🩹 Fixes
+
+- Resolve clippy warnings ([0b89a40](https://github.com/kiki-kanri/rs-pathkit/commit/0b89a40))
+
+### 🏡 Chore
+
+- Sync public scripts libs from upstream ([4d75fea](https://github.com/kiki-kanri/rs-pathkit/commit/4d75fea))
+- **lint:** Refine crate lint policy ([bb4980c](https://github.com/kiki-kanri/rs-pathkit/commit/bb4980c))
+- Ignore local AI tooling artifacts ([4b42b7c](https://github.com/kiki-kanri/rs-pathkit/commit/4b42b7c))
+- Bump toolchain channel to `nightly-2026-08-01` ([30d3df8](https://github.com/kiki-kanri/rs-pathkit/commit/30d3df8))
+- Update `modify-files-permissions.sh` ([1ccf4ae](https://github.com/kiki-kanri/rs-pathkit/commit/1ccf4ae))
+- Update `modify-files-permissions.sh` ([a004939](https://github.com/kiki-kanri/rs-pathkit/commit/a004939))
+- Update `modify-files-permissions.sh` ([8aa9aa5](https://github.com/kiki-kanri/rs-pathkit/commit/8aa9aa5))
+- Update `modify-files-permissions.sh` ([347b3e4](https://github.com/kiki-kanri/rs-pathkit/commit/347b3e4))
+- Update `modify-files-permissions.sh` ([f7da945](https://github.com/kiki-kanri/rs-pathkit/commit/f7da945))
+- Update `.gitignore` ([1a910c9](https://github.com/kiki-kanri/rs-pathkit/commit/1a910c9))
+- Add dylint config and cargo alias ([1c18e2c](https://github.com/kiki-kanri/rs-pathkit/commit/1c18e2c))
+- Bump toolchain channel to `nightly-2026-09-01` ([505d781](https://github.com/kiki-kanri/rs-pathkit/commit/505d781))
+- Add `clone_on_ref_ptr` lint rule ([595d64d](https://github.com/kiki-kanri/rs-pathkit/commit/595d64d))
+- Update `.gitignore` ([6e4ccf7](https://github.com/kiki-kanri/rs-pathkit/commit/6e4ccf7))
+- Upgrade deps ([b4feeac](https://github.com/kiki-kanri/rs-pathkit/commit/b4feeac))
+- Lint code ([19cd7d7](https://github.com/kiki-kanri/rs-pathkit/commit/19cd7d7))
+
+### ❤️ Contributors
+
+- Kiki-kanri
+
 ## v1.4.2
 
 [compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v1.4.1...v1.4.2)
