@@ -525,7 +525,7 @@ mod tests {
         let iter_components: Vec<_> = path.iter().collect();
 
         assert!(components.len() >= 3);
-        assert!(!iter_components.is_empty());
+        assert_ne!(iter_components, [] as [&OsStr; 0]);
     }
 
     // Skip contains test - Path doesn't have this method
