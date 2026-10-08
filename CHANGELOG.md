@@ -1,5 +1,36 @@
 # Changelog
 
+## v1.5.0
+
+[compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v1.4.3...v1.5.0)
+
+### 🚀 Enhancements
+
+- Support ordering for Path ([7521fd9](https://github.com/kiki-kanri/rs-pathkit/commit/7521fd9))
+
+### 🩹 Fixes
+
+- Prevent touch truncation and blocking directory checks ([9295af3](https://github.com/kiki-kanri/rs-pathkit/commit/9295af3))
+
+### 📖 Documentation
+
+- Align Rustdoc with API documentation standards ([5c95fb3](https://github.com/kiki-kanri/rs-pathkit/commit/5c95fb3))
+- Link SeaORM references to resolve Rustdoc lint warnings ([4f66a46](https://github.com/kiki-kanri/rs-pathkit/commit/4f66a46))
+
+### 📦 Build
+
+- **lint:** Migrate from Dylint to native Mordant ([e883385](https://github.com/kiki-kanri/rs-pathkit/commit/e883385))
+
+### 🏡 Chore
+
+- Update dylint mordant repo rev and bump toolchain channel to `nightly-2026-10-01` ([f74a335](https://github.com/kiki-kanri/rs-pathkit/commit/f74a335))
+- Update ignore files ([315edf8](https://github.com/kiki-kanri/rs-pathkit/commit/315edf8))
+- Upgrade deps ([e7d4b96](https://github.com/kiki-kanri/rs-pathkit/commit/e7d4b96))
+
+### ❤️ Contributors
+
+- Kiki-kanri
+
 ## v1.4.3
 
 [compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v1.4.2...v1.4.3)
