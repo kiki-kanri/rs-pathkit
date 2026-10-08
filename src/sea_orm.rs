@@ -1,4 +1,4 @@
-//! SeaORM string-column integration for [`Path`].
+//! [SeaORM](https://www.sea-ql.org/SeaORM/) string-column integration for [`Path`].
 //!
 //! Available with the `sea-orm` feature. Converting a path into [`sea_orm::Value`]
 //! consumes it and stores a string, replacing invalid Unicode with the replacement

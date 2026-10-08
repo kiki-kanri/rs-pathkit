@@ -25,7 +25,8 @@
 //! - `async-fs-ops` enables `AsyncFsOps` and `AsyncPathEntry`, adding Tokio and `async-trait`.
 //!   Async filesystem operations require a Tokio runtime with blocking-task support.
 //!   Dropping a future does not roll back completed changes or necessarily stop submitted I/O.
-//! - `sea-orm` adds SeaORM model-field and value conversions. Paths are stored as strings;
+//! - `sea-orm` adds [SeaORM](https://www.sea-ql.org/SeaORM/) model-field and value conversions.
+//!   Paths are stored as strings;
 //!   writing a non-Unicode path replaces invalid Unicode with the replacement character.
 //! - `all` enables both optional features.
 //! - `full` enables `all`.
