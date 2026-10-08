@@ -59,7 +59,8 @@ use super::{
 /// - [`Self::truncate_sync`] opens an existing file for writing and sets its length in
 ///   bytes; `None` means `0`. Extending a file fills the added range with zero bytes.
 /// - [`Self::touch_sync`] updates only the modification time of an existing target to
-///   the current time, or creates a missing file. It does not create parent directories.
+///   the current time, or creates a missing file. It does not truncate existing content
+///   or create parent directories.
 /// - [`Self::create_parent_dir_sync`] creates only the immediate parent and returns `true`
 ///   on successful creation; an existing parent is an error. [`Self::create_parent_dir_all_sync`]
 ///   creates missing ancestors and returns `true` on success even if the parent already
@@ -363,13 +364,12 @@ impl SyncFsOps for Path {
     }
 
     fn touch_sync(&self) -> Result<()> {
-        if self.exists_sync()? {
-            let t = SystemTime::now();
-            set_file_mtime(self, FileTime::from_system_time(t))?;
-        } else {
-            File::create(self)?;
+        if !self.exists_sync()? {
+            OpenOptions::new().write(true).create(true).truncate(false).open(self)?;
         }
 
+        let t = SystemTime::now();
+        set_file_mtime(self, FileTime::from_system_time(t))?;
         Ok(())
     }
 

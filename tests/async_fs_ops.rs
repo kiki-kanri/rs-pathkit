@@ -394,6 +394,45 @@ async fn test_empty_dir() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn test_empty_dir_creates_missing_directory() -> Result<()> {
+    let directory = tempdir()?;
+    let path = path!(&directory) / "parent" / "empty";
+
+    path.empty_dir().await?;
+
+    assert!(path.is_dir().await?);
+    assert_eq!(path.read_dir_paths().await?.len(), 0);
+    Ok(())
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn test_empty_dir_removes_symlinks_without_removing_targets() -> Result<()> {
+    use std::os::unix::fs::symlink;
+
+    let directory = tempdir()?;
+    let external = tempdir()?;
+    let target_file = path!(&external) / "keep.txt";
+    let target_dir = path!(&external) / "keep-dir";
+    let nested_file = &target_dir / "keep.txt";
+    async_fs::write(&target_file, b"preserved").await?;
+    async_fs::create_dir(&target_dir).await?;
+    async_fs::write(&nested_file, b"nested content").await?;
+
+    symlink(&target_file, path!(&directory) / "file-link")?;
+    symlink(&target_dir, path!(&directory) / "dir-link")?;
+    symlink(path!(&external) / "missing", path!(&directory) / "dangling-link")?;
+
+    let path = path!(&directory);
+    path.empty_dir().await?;
+
+    assert_eq!(path.read_dir_paths().await?.len(), 0);
+    assert_eq!(async_fs::read(&target_file).await?, b"preserved");
+    assert_eq!(async_fs::read(&nested_file).await?, b"nested content");
+    Ok(())
+}
+
 // Test set_permissions
 #[cfg(unix)]
 #[tokio::test]

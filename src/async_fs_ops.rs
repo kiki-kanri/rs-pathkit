@@ -65,7 +65,8 @@ use super::{
 ///   exists. Both return `false` when the lexical path has no parent.
 /// - [`Self::empty_dir`] creates a missing directory with its parents or removes the
 ///   entries of an existing directory, keeping the directory itself. Removal is incremental
-///   and uses Tokio's file and recursive-directory removal rules.
+///   and uses Tokio's file and recursive-directory removal rules. Child symlinks are
+///   removed without traversing their targets.
 /// - Directory collection methods return entries in filesystem iteration order, without
 ///   sorting. [`Self::read_dir_names`] converts names to strings with invalid Unicode
 ///   replaced; [`Self::read_dir_paths`] and [`Self::read_dir_entries`] retain native path
@@ -212,6 +213,9 @@ impl AsyncFsOps for Path {
     }
 
     async fn empty_dir(&self) -> Result<()> {
+        #[cfg(windows)]
+        use std::os::windows::fs::FileTypeExt;
+
         if !self.exists().await? {
             self.create_dir_all().await?;
         }
@@ -219,9 +223,16 @@ impl AsyncFsOps for Path {
         let mut entries = fs::read_dir(self).await?;
         while let Some(entry) = entries.next_entry().await? {
             let entry_path = entry.path();
-            if entry_path.is_dir() {
+            let file_type = entry.file_type().await?;
+            if file_type.is_dir() {
                 fs::remove_dir_all(entry_path).await?;
             } else {
+                #[cfg(windows)]
+                if file_type.is_symlink_dir() {
+                    fs::remove_dir(entry_path).await?;
+                    continue;
+                }
+
                 fs::remove_file(entry_path).await?;
             }
         }

@@ -4,6 +4,8 @@ use std::{
         Read,
         Write,
     },
+    sync::Barrier,
+    thread::scope,
 };
 
 use anyhow::{
@@ -540,6 +542,55 @@ fn test_touch_sync_updates_existing() -> Result<()> {
     let meta_after = fs::metadata(&temp_file)?;
     let mtime_after = meta_after.modified()?;
     assert!(mtime_after > mtime_before);
+    Ok(())
+}
+
+#[test]
+fn test_touch_sync_preserves_concurrently_written_content() -> Result<()> {
+    let directory = tempdir()?;
+    for index in 0..32 {
+        let file = path!(&directory) / format!("touch-{index}.txt");
+        let barrier = Barrier::new(5);
+
+        scope(|scope| -> Result<()> {
+            let handles: Vec<_> = (0..4)
+                .map(|_| {
+                    scope.spawn(|| {
+                        barrier.wait();
+                        file.touch_sync()
+                    })
+                })
+                .collect();
+
+            barrier.wait();
+            let write_result = fs::write(&file, b"preserved content");
+            for handle in handles {
+                handle.join().map_err(|_| anyhow!("touch worker panicked"))??;
+            }
+
+            write_result?;
+            Ok(())
+        })?;
+
+        assert_eq!(fs::read(&file)?, b"preserved content");
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_touch_sync_creates_dangling_symlink_target() -> Result<()> {
+    use std::os::unix::fs::symlink;
+
+    let directory = tempdir()?;
+    let target = path!(&directory) / "target.txt";
+    let link = path!(&directory) / "link.txt";
+    symlink(&target, &link)?;
+
+    link.touch_sync()?;
+
+    assert!(fs::symlink_metadata(&link)?.file_type().is_symlink());
+    assert!(target.is_file_sync()?);
     Ok(())
 }
 
