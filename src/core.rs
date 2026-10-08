@@ -50,7 +50,7 @@ use serde::{
 /// let file_name = path.file_name();
 /// let extension = path.extension();
 /// ```
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(transparent)]
 pub struct Path(pub(crate) PathBuf);
 
