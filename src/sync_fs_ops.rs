@@ -1,17 +1,6 @@
-//! Synchronous file system operations module
+//! Blocking filesystem operations for owned paths.
 //!
-//! This module provides the `SyncFsOps` trait for synchronous file system operations.
-//! Implement this trait on any type to provide blocking file operations.
-//!
-//! # Example
-//!
-//! ```rust,ignore
-//! use pathkit::{Path, SyncFsOps};
-//!
-//! let path = Path::new("/tmp/test.txt");
-//! path.write_sync(b"Hello!")?;
-//! let content = path.read_sync()?;
-//! ```
+//! [`SyncFsOps`] defines the shared operation contract and is implemented for [`Path`].
 
 use std::{
     fs::{
@@ -45,29 +34,77 @@ use super::{
     entry::sync::PathEntry,
 };
 
-/// Trait for synchronous file system operations.
+/// Blocking filesystem operations for paths.
 ///
-/// This trait provides blocking file system operations similar to Python's pathlib.
-/// It is implemented for `Path` but can be implemented for other types as well.
+/// [`Path`] implements this trait. For that implementation, methods borrow the stored
+/// path without changing it; filesystem changes occur during the call. Paths are
+/// interpreted by the operating system, including relative paths resolved against the
+/// current working directory. Multi-step operations are not transactional and can leave
+/// partial changes on failure. The behavior described below applies to that implementation.
 ///
-/// # Example
+/// The [`Path`] implementation provides these shared behaviors:
 ///
-/// ```rust,ignore
-/// use pathkit::{Path, SyncFsOps};
+/// - Metadata and type checks follow symlinks, except [`Self::is_symlink_sync`] and
+///   [`Self::symlink_metadata_sync`]. Type checks return an error for missing paths,
+///   rather than `false`. [`Self::exists_sync`] returns `false` for a missing target,
+///   including a dangling symlink, and propagates other inspection errors.
+/// - [`Self::get_file_size_sync`] returns metadata length in bytes, which is not
+///   necessarily allocated disk space or a meaningful content size for non-files.
+/// - [`Self::open_sync`] opens an existing file read-only. [`Self::open_with_options_sync`]
+///   uses the supplied options without changing them. Returned files follow
+///   [`std::fs::File`] ownership and close behavior.
+/// - [`Self::write_sync`] and [`Self::write_json_sync`] create or truncate a file without
+///   creating parent directories. JSON uses pretty serialization. [`Self::read_json_sync`]
+///   deserializes the complete file contents.
+/// - [`Self::truncate_sync`] opens an existing file for writing and sets its length in
+///   bytes; `None` means `0`. Extending a file fills the added range with zero bytes.
+/// - [`Self::touch_sync`] updates only the modification time of an existing target to
+///   the current time, or creates a missing file. It does not create parent directories.
+/// - [`Self::create_parent_dir_sync`] creates only the immediate parent and returns `true`
+///   on successful creation; an existing parent is an error. [`Self::create_parent_dir_all_sync`]
+///   creates missing ancestors and returns `true` on success even if the parent already
+///   exists. Both return `false` when the lexical path has no parent.
+/// - [`Self::empty_dir_sync`] creates a missing directory with its parents or removes
+///   the entries of an existing directory, keeping the directory itself. Removal is
+///   incremental and uses the standard library's file and recursive-directory removal rules.
+/// - Directory collection methods return entries in filesystem iteration order, without
+///   sorting. [`Self::read_dir_names_sync`] converts names to strings with invalid Unicode
+///   replaced; [`Self::read_dir_paths_sync`] and [`Self::read_dir_entries_sync`] retain
+///   native path data. [`Self::read_dir_sync`] returns a lazy iterator whose entries can fail.
+/// - [`Self::copy_file_sync`] copies to the exact destination, overwriting an existing file
+///   and returning the number of bytes copied. [`Self::move_to_sync`] renames to the exact
+///   destination and returns a new [`Path`]; it does not update the source value or fall back
+///   to copying across filesystems. Replacement rules depend on the platform.
+/// - Link methods use `self` as the source or target and `link` as the new link path.
+///   [`Self::hard_link_sync`] requires filesystem support. Unix-only symbolic-link methods
+///   store the target as supplied and return the stored target without resolving it.
 ///
-/// let path = Path::new("/tmp/test.txt");
+/// Unix-only methods expose permission modes, owner and group IDs, and special-file
+/// checks. For ownership changes, `None` preserves the corresponding owner or group ID.
+/// Filesystem methods otherwise follow the corresponding [`std::fs`] operations.
 ///
-/// // Check if file exists
-/// if path.exists_sync()? {
-///     // Read file contents
-///     let content = path.read_sync()?;
-/// }
+/// # Errors
 ///
-/// // Write to file
-/// path.write_sync(b"Hello, world!")?;
+/// Propagates filesystem errors such as missing paths, permission errors, invalid file
+/// or directory types, and unsupported operations. Directory collection methods also
+/// propagate iteration errors instead of returning partial collections. UTF-8 string
+/// reads fail for invalid UTF-8; JSON reads and writes also propagate deserialization
+/// or serialization errors. Changes made before an error are not rolled back.
 ///
-/// // Get file size
-/// let size = path.get_file_size_sync()?;
+/// # Examples
+///
+/// ```rust
+/// use pathkit::{
+///     SyncFsOps,
+///     path,
+/// };
+///
+/// let directory = tempfile::tempdir()?;
+/// let file = path!(directory.path()) / "message.txt";
+/// file.write_sync(b"Hello!")?;
+/// assert_eq!(file.read_sync()?, b"Hello!");
+/// assert_eq!(file.get_file_size_sync()?, 6);
+/// # Ok::<(), anyhow::Error>(())
 /// ```
 pub trait SyncFsOps {
     #[cfg(unix)]

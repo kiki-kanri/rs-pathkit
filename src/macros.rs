@@ -1,21 +1,39 @@
-//! Convenience macros for creating [`Path`](crate::Path) values.
+//! Path construction from native path expressions and formatted string literals.
 
-/// Creates a [`Path`](crate::Path), with optional [`format!`]-style interpolation.
+/// Creates an owned [`Path`](crate::Path) from a path expression or formatted string literal.
 ///
-/// `path!` accepts either a direct path expression or a string literal using the
-/// same formatting syntax as [`format!`].
+/// `path!(expression)` passes the expression to [`Path::new`](crate::Path::new), which
+/// copies its path data without accessing the filesystem. An owned expression is consumed;
+/// a borrowed expression leaves its source available. A non-literal expression accepts
+/// an optional trailing comma.
+///
+/// `path!("format string", arguments...)` uses [`format!`] syntax, including captured
+/// variables. A string literal always uses this formatting form, even without arguments;
+/// literal braces must be escaped as `{{` and `}}`. Expression operands must implement
+/// `AsRef<std::path::Path>`; formatting arguments follow [`format!`] requirements.
+///
+/// # Panics
+///
+/// The formatting form panics if an argument's formatting implementation panics or
+/// returns a formatting error.
 ///
 /// # Examples
 ///
 /// ```rust
-/// use pathkit::{Path, path};
+/// use pathkit::{
+///     Path,
+///     path,
+/// };
 ///
-/// let direct = path!(String::from("/tmp/example"));
-/// assert_eq!(direct, Path::new("/tmp/example"));
+/// let source = String::from("config.json");
+/// let direct = path!(&source);
+/// assert_eq!(direct, Path::new("config.json"));
+/// assert_eq!(source, "config.json");
 ///
 /// let name = "config";
-/// let formatted = path!("/tmp/{name}.{}", "json");
-/// assert_eq!(formatted, Path::new("/tmp/config.json"));
+/// let formatted = path!("{name}.{}", "json");
+/// assert_eq!(formatted, direct);
+/// assert_eq!(path!("{{config}}.json"), Path::new("{config}.json"));
 /// ```
 #[macro_export]
 macro_rules! path {

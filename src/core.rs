@@ -1,7 +1,7 @@
-//! Core path operations module
+//! Owned paths and lexical path transformations.
 //!
-//! This module provides the main `Path` struct which wraps `std::path::PathBuf`
-//! and provides extended functionality similar to Python's pathlib.
+//! Filesystem access is limited to operations that explicitly require it, such as
+//! [`Path::canonicalize`].
 
 use std::{
     ffi::OsStr,
@@ -19,223 +19,277 @@ use serde::{
     Serialize,
 };
 
-/// A wrapper around `std::path::PathBuf` that provides extended path operations.
+/// An owned filesystem path with path transformations and filesystem extension traits.
 ///
-/// `Path` is similar to Python's `pathlib.Path`, providing an object-oriented
-/// interface for path manipulation. It wraps `std::path::PathBuf` and implements
-/// various traits for seamless interoperability with the standard library.
+/// The path retains the platform-native representation of [`std::path::PathBuf`].
+/// Construction and lexical transformations do not require the path to exist and do
+/// not modify the filesystem. Borrowed transformations leave the original value unchanged.
 ///
-/// # Features
+/// Dereferencing exposes [`std::path::Path`] methods. Equality, hashing, and ordering
+/// follow [`std::path::PathBuf`] semantics, not filesystem identity or natural sorting.
+/// The `/` operator returns a joined path; an owned operand is consumed, while a borrowed
+/// operand remains available.
 ///
-/// - **Serde Support**: Can be serialized and deserialized
-/// - **Trait Implementations**: Implements `AsRef`, `Borrow`, `Deref`, `Display`, `From`
-/// - **Path Joining**: Supports the `/` operator via the `Div` trait
+/// Serde serialization and deserialization use the underlying [`std::path::PathBuf`]
+/// representation; serialization fails if the native path is not valid UTF-8.
+/// Converting into [`String`] or formatting with [`std::fmt::Display`] replaces invalid
+/// Unicode with the replacement character. In contrast, borrowing
+/// through `AsRef<str>` panics if the path is not valid UTF-8; use
+/// [`std::path::Path::to_str`] to check or [`Self::as_path`] to preserve native encoding.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```rust
-/// use pathkit::Path;
+/// use pathkit::path;
 ///
-/// // Create a path
-/// let path = Path::new("/home/user/project");
+/// let root = path!("project");
+/// let config = &root / "config" / "app.json";
+/// assert_eq!(config, root.join("config").join("app.json"));
+/// assert_eq!(root, path!("project"));
 ///
-/// // Join paths
-/// let config = path.join("config.json");
-///
-/// // Use / operator (note: this consumes the path)
-/// let nested = Path::new("/home/user") / "project" / "subdir";
-///
-/// // Get path components
-/// let parent = path.parent();
-/// let file_name = path.file_name();
-/// let extension = path.extension();
+/// let mut paths = vec![path!("b"), path!("a")];
+/// paths.sort();
+/// assert_eq!(paths, vec![path!("a"), path!("b")]);
 /// ```
+///
+/// # See also
+///
+/// - [`crate::SyncFsOps`]
+/// - [`crate::PathEntry`]
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(transparent)]
 pub struct Path(pub(crate) PathBuf);
 
 impl Path {
-    /// Creates a new `Path` from a given path.
+    /// Creates an owned copy of a path without accessing the filesystem.
     ///
-    /// This method accepts any type that can be referenced as a standard path,
-    /// including `&str`, `String`, `OsStr`, `OsString`, `PathBuf`, `&std::path::Path`,
-    /// and `&Path`.
+    /// Accepts any value implementing `AsRef<std::path::Path>`, including native OS strings,
+    /// standard paths, and [`Path`] values. The input is borrowed to copy its path data;
+    /// passing an owned value consumes that argument but does not reuse its buffer.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```rust
     /// use pathkit::Path;
     ///
-    /// // From &str
-    /// let path = Path::new("/test/path");
-    ///
-    /// // From String
-    /// let path = Path::new(String::from("/test/path"));
-    ///
-    /// // From PathBuf
-    /// use std::path::PathBuf;
-    /// let path = Path::new(PathBuf::from("/test/path"));
-    ///
-    /// // From std::path::Path
-    /// let path = Path::new(std::path::Path::new("/test/path"));
+    /// let path = Path::new("project/config.json");
+    /// assert_eq!(path.as_path(), std::path::Path::new("project/config.json"));
     /// ```
     #[inline]
     pub fn new(path: impl AsRef<StdPath>) -> Self {
         Self(path.as_ref().to_path_buf())
     }
 
-    /// Converts the path to an absolute path.
+    /// Returns a new lexically normalized absolute path using the current working directory.
     ///
-    /// This uses the `path-absolutize` crate which handles edge cases
-    /// like converting relative paths to absolute paths.
+    /// Resolves `.` and `..` through [`path_absolutize::Absolutize::absolutize`] without
+    /// resolving symlinks or requiring the path to exist. The original path is unchanged.
     ///
-    /// # Example
+    /// # Errors
     ///
-    /// ```rust,ignore
-    /// use pathkit::Path;
+    /// Returns an error if obtaining the current working directory fails for a relative path.
     ///
-    /// let path = Path::new("relative/path");
+    /// # Examples
+    ///
+    /// ```rust
+    /// use pathkit::path;
+    ///
+    /// let path = path!("relative/file.txt");
     /// let absolute = path.absolutize()?;
     /// assert!(absolute.is_absolute());
+    /// assert_eq!(path, path!("relative/file.txt"));
+    /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn absolutize(&self) -> Result<Self> {
         Ok(Self::new(self.0.absolutize()?))
     }
 
-    /// Converts the path to an absolute path, using the given directory as base.
+    /// Returns a new lexically normalized path using `cwd` as the base for relative paths.
     ///
-    /// # Example
+    /// Uses [`path_absolutize::Absolutize::absolutize_from`] without accessing the filesystem
+    /// or resolving symlinks. Supply an absolute `cwd` to obtain an absolute result;
+    /// a relative base does not establish an absolute working directory. The original
+    /// path is unchanged.
     ///
-    /// ```rust,ignore
-    /// use pathkit::Path;
+    /// Although the return type is [`anyhow::Result`], this implementation always returns `Ok`.
     ///
-    /// let path = Path::new("relative/path");
-    /// let absolute = path.absolutize_from("/custom/cwd")?;
+    /// # Examples
+    ///
+    /// ```rust
+    /// use pathkit::path;
+    ///
+    /// let base = std::env::current_dir()?;
+    /// let resolved = path!("config.json").absolutize_from(&base)?;
+    /// assert_eq!(resolved, path!(base.join("config.json")));
+    /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn absolutize_from(&self, cwd: impl AsRef<StdPath>) -> Result<Self> {
         Ok(Self::new(self.0.absolutize_from(cwd)))
     }
 
-    /// Converts a relative path to an absolute path with a virtual root.
+    /// Returns a new lexically normalized path relative to a virtual root.
     ///
-    /// This is useful for testing or sandboxed environments where you want
-    /// to treat a directory as the root.
+    /// Uses [`path_absolutize::Absolutize::absolutize_virtually`]. A relative `virtual_root`
+    /// is resolved against the current working directory. Relative paths are normalized
+    /// before being joined to that root; absolute paths are checked using the upstream
+    /// platform-specific root check. The original path is unchanged.
     ///
-    /// # Example
+    /// This operation neither resolves symlinks nor creates a filesystem sandbox. It must
+    /// not be used as a security boundary or as proof that filesystem access stays within
+    /// `virtual_root`.
     ///
-    /// ```rust,ignore
-    /// use pathkit::Path;
+    /// # Errors
     ///
-    /// let path = Path::new("subdir/file.txt");
-    /// let absolute = path.absolutize_virtually("/virtual/root")?;
-    /// assert_eq!(absolute.to_str(), Some("/virtual/root/subdir/file.txt"));
+    /// Propagates errors from resolving the root or normalizing the path. Returns an error
+    /// when the upstream root check rejects an absolute path or a Windows drive prefix.
+    /// On Windows, checks requiring UTF-8 also fail for non-UTF-8 paths or roots.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use pathkit::path;
+    ///
+    /// let root = std::env::current_dir()?;
+    /// let resolved = path!("config.json").absolutize_virtually(&root)?;
+    /// assert_eq!(resolved, path!(root.join("config.json")));
+    /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn absolutize_virtually(&self, virtual_root: impl AsRef<StdPath>) -> Result<Self> {
         Ok(Self::new(self.0.absolutize_virtually(virtual_root)?))
     }
 
-    /// Returns a reference to the underlying `std::path::Path`.
+    /// Returns a borrowed view of the underlying standard path without copying its data.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```rust
-    /// use pathkit::Path;
+    /// use pathkit::path;
     ///
-    /// let path = Path::new("/test/path");
-    /// let std_path = path.as_path();
-    /// assert_eq!(std_path, std::path::Path::new("/test/path"));
+    /// let path = path!("config.json");
+    /// assert_eq!(path.as_path(), std::path::Path::new("config.json"));
     /// ```
     #[inline]
     pub fn as_path(&self) -> &StdPath {
         &self.0
     }
 
-    /// Returns the canonical form of the path.
+    /// Returns a new absolute path with symlinks resolved by the filesystem.
     ///
-    /// This resolves symlinks and normalizes the path. Unlike `absolutize`,
-    /// this requires the path to exist.
+    /// Uses [`std::fs::canonicalize`], leaving the original value unchanged. Unlike
+    /// [`Self::absolutize`], this operation requires the path to exist. On Windows, the
+    /// result uses the standard library's extended-length path representation.
     ///
-    /// # Example
+    /// # Errors
     ///
-    /// ```rust,ignore
-    /// use pathkit::Path;
+    /// Propagates filesystem errors, including missing path components, permission errors,
+    /// and non-directory components before the end of the path.
     ///
-    /// let path = Path::new(".");
-    /// let canonical = path.canonicalize()?;
+    /// # Examples
+    ///
+    /// ```rust
+    /// use pathkit::path;
+    ///
+    /// let directory = tempfile::tempdir()?;
+    /// let canonical = path!(directory.path()).canonicalize()?;
     /// assert!(canonical.is_absolute());
+    /// # Ok::<(), std::io::Error>(())
     /// ```
     pub fn canonicalize(&self) -> Result<Self, std::io::Error> {
         canonicalize(&self.0).map(Self::new)
     }
 
-    /// Joins this path with another path.
+    /// Returns a new path with `path` joined according to standard path semantics.
     ///
-    /// # Example
+    /// Leaves the original value unchanged. An absolute argument replaces the base;
+    /// Windows rooted paths and drive prefixes follow [`std::path::PathBuf::push`].
+    /// This is a lexical operation, not a check that the result stays within the base.
+    ///
+    /// # Examples
     ///
     /// ```rust
-    /// use std::path::MAIN_SEPARATOR;
+    /// use pathkit::path;
     ///
-    /// use pathkit::Path;
+    /// let base = path!("project");
+    /// let joined = base.join("config.json");
+    /// assert_eq!(
+    ///     joined.as_path(),
+    ///     std::path::Path::new("project").join("config.json")
+    /// );
     ///
-    /// let path = Path::new(&format!("{0}base", MAIN_SEPARATOR));
-    /// let joined = path.join(&format!("subdir{0}file.txt", MAIN_SEPARATOR));
-    /// assert_eq!(joined.to_str(), Some(format!("{0}base{0}subdir{0}file.txt", MAIN_SEPARATOR).as_str()));
+    /// assert_eq!(base, path!("project"));
     /// ```
+    ///
+    /// # See also
+    ///
+    /// - [`std::path::Path::join`]
     #[inline]
     #[must_use]
     pub fn join(&self, path: impl AsRef<StdPath>) -> Self {
         Self::new(self.0.join(path))
     }
 
-    /// Returns the parent directory of this path.
+    /// Returns an owned parent path, or `None` if no parent exists.
     ///
-    /// # Example
+    /// Leaves the original value unchanged and follows [`std::path::Path::parent`].
+    /// A root or empty path has no parent; a one-component relative path has an empty
+    /// parent path rather than `None`.
+    ///
+    /// # Examples
     ///
     /// ```rust
-    /// use pathkit::Path;
+    /// use pathkit::path;
     ///
-    /// let path = Path::new("/base/subdir/file.txt");
-    /// assert_eq!(path.parent().unwrap().to_str(), Some("/base/subdir"));
+    /// assert_eq!(
+    ///     path!("project/config.json").parent(),
+    ///     Some(path!("project"))
+    /// );
     ///
-    /// // Root path has no parent
-    /// let root = Path::new("/");
-    /// assert!(root.parent().is_none());
+    /// assert_eq!(path!("config.json").parent(), Some(path!("")));
+    /// assert_eq!(path!("").parent(), None);
     /// ```
     #[inline]
     pub fn parent(&self) -> Option<Self> {
         self.0.parent().map(Self::new)
     }
 
-    /// Converts this path to a `PathBuf`.
+    /// Returns an owned copy of the underlying [`std::path::PathBuf`].
     ///
-    /// # Example
+    /// Leaves the original value unchanged. To transfer the buffer instead of copying it,
+    /// consume the path with `PathBuf::from(path)`.
+    ///
+    /// # Examples
     ///
     /// ```rust
-    /// use pathkit::Path;
     /// use std::path::PathBuf;
     ///
-    /// let path = Path::new("/test/path");
-    /// let buf: PathBuf = path.to_path_buf();
-    /// assert_eq!(buf, PathBuf::from("/test/path"));
+    /// use pathkit::path;
+    ///
+    /// let path = path!("config.json");
+    /// assert_eq!(path.to_path_buf(), PathBuf::from("config.json"));
     /// ```
     #[inline]
     pub fn to_path_buf(&self) -> PathBuf {
         self.0.clone()
     }
 
-    /// Returns a new path with an extension appended to the full file name.
+    /// Returns a new path with `extension` appended to its full file name.
     ///
-    /// This mirrors [`std::path::Path::with_added_extension`] but keeps the
-    /// fluent API in `pathkit::Path` instead of returning `PathBuf`. Unlike
-    /// [`Self::with_extension`], this appends instead of replacing.
+    /// Leaves the original value unchanged. Unlike [`Self::with_extension`], this keeps
+    /// any existing extension. An empty extension or a path without a file name leaves
+    /// the path unchanged, following [`std::path::Path::with_added_extension`].
     ///
-    /// # Example
+    /// # Panics
+    ///
+    /// Panics if `extension` contains a path separator recognized by the current platform.
+    ///
+    /// # Examples
     ///
     /// ```rust
-    /// use pathkit::Path;
+    /// use pathkit::path;
     ///
-    /// let path = Path::new("/path/to/app.log");
-    /// assert_eq!(path.with_added_extension("1").to_str(), Some("/path/to/app.log.1"));
+    /// let path = path!("app.log");
+    /// assert_eq!(path.with_added_extension("1"), path!("app.log.1"));
+    /// assert_eq!(path, path!("app.log"));
     /// ```
     #[inline]
     #[must_use]
@@ -243,20 +297,26 @@ impl Path {
         Self::new(self.0.with_added_extension(extension))
     }
 
-    /// Returns a new path with a different file extension.
+    /// Returns a new path with its final extension replaced by `extension`.
     ///
-    /// # Example
+    /// Leaves the original value unchanged. An empty extension removes the final extension;
+    /// a path without a file stem is unchanged, following [`std::path::Path::with_extension`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if `extension` contains a path separator recognized by the current platform.
+    ///
+    /// # Examples
     ///
     /// ```rust
-    /// use pathkit::Path;
+    /// use pathkit::path;
     ///
-    /// // Replace extension
-    /// let path = Path::new("/path/to/file.txt");
-    /// assert_eq!(path.with_extension("md").to_str(), Some("/path/to/file.md"));
+    /// assert_eq!(
+    ///     path!("archive.tar.gz").with_extension("xz"),
+    ///     path!("archive.tar.xz")
+    /// );
     ///
-    /// // Add extension to file without one
-    /// let path = Path::new("/path/to/file");
-    /// assert_eq!(path.with_extension("txt").to_str(), Some("/path/to/file.txt"));
+    /// assert_eq!(path!("config.json").with_extension(""), path!("config"));
     /// ```
     #[inline]
     #[must_use]
@@ -264,20 +324,24 @@ impl Path {
         Self::new(self.0.with_extension(extension))
     }
 
-    /// Returns a new path with a different file name.
+    /// Returns a new path with its file name replaced by `file_name`.
     ///
-    /// This mirrors [`std::path::Path::with_file_name`] but keeps the fluent
-    /// API in `pathkit::Path` instead of returning `PathBuf`.
+    /// Leaves the original value unchanged. If there is no file name, appends `file_name`.
+    /// The argument is interpreted as a path, not validated as a single component;
+    /// separators, rooted paths, and drive prefixes follow [`std::path::Path::with_file_name`].
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```rust
-    /// use pathkit::Path;
-    /// use std::path::MAIN_SEPARATOR;
+    /// use pathkit::path;
     ///
-    /// let path = Path::new("/path/to/file.txt");
-    /// let expected = format!("/path/to{MAIN_SEPARATOR}other.md");
-    /// assert_eq!(path.with_file_name("other.md").to_str(), Some(expected.as_str()));
+    /// let path = path!("project/config.json");
+    /// assert_eq!(
+    ///     path.with_file_name("settings.json"),
+    ///     path!("project").join("settings.json")
+    /// );
+    ///
+    /// assert_eq!(path, path!("project/config.json"));
     /// ```
     #[inline]
     #[must_use]

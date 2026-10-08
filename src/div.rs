@@ -38,7 +38,10 @@ impl Div<Path> for Path {
     }
 }
 
-/// Division via `&str` — enabled by `AsRef<str>` on `Path`.
+/// A path-joining operator with a string operand and an owned path result.
+///
+/// Borrows both operands without changing the base path. Uses [`Path::join`], including
+/// its rooted-path and absolute-path replacement rules.
 impl Div<&str> for &Path {
     type Output = Path;
 
@@ -48,7 +51,10 @@ impl Div<&str> for &Path {
     }
 }
 
-/// Division via `&String` — `&String` coerces to `&str` via Deref.
+/// A path-joining operator with a string operand and an owned path result.
+///
+/// Borrows both operands without changing the base path. Uses [`Path::join`], including
+/// its rooted-path and absolute-path replacement rules.
 impl Div<&String> for &Path {
     type Output = Path;
 
@@ -58,7 +64,10 @@ impl Div<&String> for &Path {
     }
 }
 
-/// Division via `String` — enabled by `AsRef<str>` on `Path`.
+/// A path-joining operator with a string operand and an owned path result.
+///
+/// Borrows the base and consumes the string without changing the base path. Uses [`Path::join`], including
+/// its rooted-path and absolute-path replacement rules.
 impl Div<String> for &Path {
     type Output = Path;
 
@@ -68,7 +77,10 @@ impl Div<String> for &Path {
     }
 }
 
-/// Division via `&str` — enabled by `AsRef<str>` on `Path`.
+/// A path-joining operator with a string operand and an owned path result.
+///
+/// Consumes the base and borrows the string. Uses [`Path::join`], including its rooted-path and
+/// absolute-path replacement rules; this does not rename or otherwise modify the filesystem.
 impl Div<&str> for Path {
     type Output = Path;
 
@@ -78,7 +90,10 @@ impl Div<&str> for Path {
     }
 }
 
-/// Division via `&String` — `&String` coerces to `&str` via Deref.
+/// A path-joining operator with a string operand and an owned path result.
+///
+/// Consumes the base and borrows the string. Uses [`Path::join`], including its rooted-path and
+/// absolute-path replacement rules; this does not rename or otherwise modify the filesystem.
 impl Div<&String> for Path {
     type Output = Path;
 
@@ -88,7 +103,10 @@ impl Div<&String> for Path {
     }
 }
 
-/// Division via `String` — enabled by `AsRef<str>` on `Path`.
+/// A path-joining operator with a string operand and an owned path result.
+///
+/// Consumes both operands. Uses [`Path::join`], including its rooted-path and
+/// absolute-path replacement rules; this does not rename or otherwise modify the filesystem.
 impl Div<String> for Path {
     type Output = Path;
 

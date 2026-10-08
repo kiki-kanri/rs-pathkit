@@ -1,32 +1,39 @@
-//! `SeaORM` integration for [`Path`].
+//! SeaORM string-column integration for [`Path`].
 //!
-//! `Path` is stored as `String` in the database.
-//! The following traits are implemented to allow `Path` as a model field:
+//! Available with the `sea-orm` feature. Converting a path into [`sea_orm::Value`]
+//! consumes it and stores a string, replacing invalid Unicode with the replacement
+//! character (`U+FFFD`). This is not a lossless format for all native paths.
 //!
-//! - [`Into<Value>`][1] — enables `ActiveValue::Set(Path(...))` and query parameters
-//! - [`ValueType`][2] — describes the column type to the schema machinery
-//! - [`Nullable`][3] — enables `Option<Path>` in models
-//! - [`TryGetable`][4] — enables reading `Path` from query results
+//! [`sea_orm::sea_query::ValueType`] accepts only non-null string values and reports a
+//! string column and string array type. Other values produce
+//! [`sea_orm::sea_query::ValueTypeErr`]. [`sea_orm::sea_query::Nullable`] supplies a null
+//! string value for optional fields. [`sea_orm::TryGetable`] reads paths through the
+//! string query-result conversion and propagates its null, type, and extraction errors.
+//! Reading a value constructs a path without checking whether it exists.
 //!
-//! [1]: Value
-//! [2]: ValueType
-//! [3]: Nullable
-//! [4]: sea_orm::TryGetable
+//! # Examples
 //!
-//! # Example
+//! ```rust
+//! use pathkit::path;
+//! use sea_orm::{
+//!     ActiveValue,
+//!     Value,
+//! };
 //!
-//! ```rust,ignore
-//! use sea_orm::entity::prelude::*;
-//! use pathkit::Path;
-//!
-//! #[derive(Clone, Debug, DeriveEntityModel)]
-//! #[sea_orm(table_name = "files")]
-//! struct Model {
-//!     #[sea_orm(primary_key)]
-//!     id: i32,
-//!     path: Path,
-//! }
+//! let field = ActiveValue::Set(path!("assets/image.png"));
+//! assert!(matches!(field, ActiveValue::Set(_)));
+//! let value = Value::from(path!("assets/image.png"));
+//! assert_eq!(
+//!     value,
+//!     Value::String(Some(Box::new(String::from("assets/image.png"))))
+//! );
 //! ```
+//!
+//! # See also
+//!
+//! - [`sea_orm::Value`]
+//! - [`sea_orm::sea_query::ValueType`]
+//! - [`sea_orm::TryGetable`]
 
 use sea_orm::{
     ColIdx,

@@ -1,116 +1,71 @@
-//! # pathkit
+//! Owned filesystem paths with synchronous and optional asynchronous file operations.
 //!
-//! A Rust library that provides a `Path` structure similar to Python's pathlib,
-//! with synchronous and optional asynchronous file manipulation methods.
+//! [`Path`] retains platform-native path data and dereferences to [`std::path::Path`].
+//! Lexical transformations return new paths; [`SyncFsOps`] performs blocking filesystem
+//! operations without updating the stored path. The [`path!`] macro supports direct
+//! path expressions and formatted string literals. Directory entries expose owned
+//! paths through [`PathEntry`].
 //!
-//! ## Features
-//!
-//! - 🧭 **Path Operations**: pathlib-style [`Path`] wrapper around `std::path::PathBuf`
-//! - 🧩 **Path Macro**: [`path!`] supports direct path expressions and `format!`-style construction
-//! - ➗ **Path Joining**: use `/` for concise path composition
-//! - 📁 **Synchronous I/O**: blocking file system operations via [`SyncFsOps`]
-//! - ⚡ **Asynchronous I/O**: non-blocking file system operations via `AsyncFsOps` (requires `async-fs-ops`)
-//! - 🔄 **Serde Support**: serialize and deserialize [`Path`]
-//! - 🗄️ **`SeaORM` Integration**: use [`Path`] as a model field (requires `sea-orm`)
-//!
-//! ## Installation
-//!
-//! ```bash
-//! cargo add pathkit
-//! cargo add pathkit --features async-fs-ops
-//! cargo add pathkit --features sea-orm
-//! cargo add pathkit --features full
-//! ```
-//!
-//! ## Basic Path Operations
+//! # Getting started
 //!
 //! ```rust
 //! use pathkit::path;
 //!
-//! let root = path!("/home/{}/project", "user");
+//! let root = path!("project");
 //! let config = &root / "config" / "app.json";
-//!
-//! // `join` is still available for std-like APIs.
-//! let readme = root.join("README.md");
-//!
-//! let parent = config.parent();
-//! let file_name = config.file_name();
-//! let extension = config.extension();
+//! assert_eq!(config, root.join("config").join("app.json"));
+//! assert_eq!(root, path!("project"));
 //! ```
 //!
-//! ## Synchronous File Operations
+//! # Features
 //!
-//! ```rust,ignore
+//! No optional features are enabled by default. Serde support and synchronous operations
+//! are always available.
+//!
+//! - `async-fs-ops` enables `AsyncFsOps` and `AsyncPathEntry`, adding Tokio and `async-trait`.
+//!   Async filesystem operations require a Tokio runtime with blocking-task support.
+//!   Dropping a future does not roll back completed changes or necessarily stop submitted I/O.
+//! - `sea-orm` adds SeaORM model-field and value conversions. Paths are stored as strings;
+//!   writing a non-Unicode path replaces invalid Unicode with the replacement character.
+//! - `all` enables both optional features.
+//! - `full` enables `all`.
+//!
+//! Enable a feature with `cargo add pathkit --features async-fs-ops`, replacing the feature
+//! name as needed. Serde delegates to [`std::path::PathBuf`]; serialization fails for
+//! native paths that are not valid UTF-8, rather than replacing invalid Unicode.
+//!
+//! # Platform support
+//!
+//! Path parsing, joining, and ordering follow the standard library's platform-specific
+//! semantics. Unix permission modes, ownership operations, and special-file checks are
+//! available only on Unix. Synchronous hard links are available on supported platforms;
+//! the synchronous symbolic-link helpers are Unix-only. Filesystem permissions, link
+//! behavior, and rename restrictions depend on the operating system and filesystem.
+//!
+//! # Examples
+//!
+//! The following example creates and removes only a temporary directory. Write and
+//! remove operations elsewhere can overwrite or delete existing data.
+//!
+//! ```rust
 //! use pathkit::{
 //!     SyncFsOps,
-//!     path
+//!     path,
 //! };
 //!
-//! let path = path!("/tmp/test.txt");
-//!
-//! path.write_sync(b"Hello, world!")?;
-//! let content = path.read_sync()?;
-//! let file = path.open_sync()?;
-//!
-//! if path.exists_sync()? {
-//!     println!("File size: {}", path.get_file_size_sync()?);
-//! }
-//!
-//! let moved = path.move_to_sync("/tmp/moved.txt")?;
-//! let config: Config = moved.read_json_sync()?;
+//! let directory = tempfile::tempdir()?;
+//! let file = path!(directory.path()) / "message.txt";
+//! file.write_sync(b"Hello!")?;
+//! assert_eq!(file.read_to_string_sync()?, "Hello!");
+//! assert_eq!(file.get_file_size_sync()?, 6);
+//! # Ok::<(), anyhow::Error>(())
 //! ```
 //!
-//! Use `open_with_options_sync()` when you need custom `std::fs::OpenOptions`.
+//! # See also
 //!
-//! ## Asynchronous File Operations
-//!
-//! Requires the `async-fs-ops` feature.
-//!
-//! ```rust,ignore
-//! use pathkit::{
-//!     AsyncFsOps,
-//!     path
-//! };
-//!
-//! let path = path!("/tmp/test.txt");
-//!
-//! path.write(b"Hello, world!").await?;
-//! let content = path.read().await?;
-//! let file = path.open().await?;
-//!
-//! path.create_parent_dir_all().await?;
-//! let moved = path.move_to("/tmp/moved.txt").await?;
-//! ```
-//!
-//! Use `open_with_options()` when you need custom `tokio::fs::OpenOptions`.
-//!
-//! ## `SeaORM` Integration
-//!
-//! Requires the `sea-orm` feature. [`Path`] is stored as `String` and can be used
-//! directly in `SeaORM` models. Implemented `SeaORM` traits: `Into<Value>`,
-//! `ValueType`, `Nullable`, and `TryGetable`.
-//!
-//! ## Feature Flags
-//!
-//! | Feature | Description |
-//! |---------|-------------|
-//! | `async-fs-ops` | Enable async file system operations via tokio |
-//! | `sea-orm` | Enable `SeaORM` value/model integration |
-//! | `all` | Enable all optional features |
-//! | `full` | Alias of `all` |
-//!
-//! ## API Overview
-//!
-//! Main entry points:
-//!
-//! - [`Path`] — owned path wrapper around `std::path::PathBuf`
-//! - [`path!`] — convenient path construction macro
-//! - `/` operator — concise path composition
-//! - [`SyncFsOps`] — blocking filesystem operations
-//! - `AsyncFsOps` — async filesystem operations with tokio
-//! - [`PathEntry`] / `AsyncPathEntry` — typed directory entries
-//!
-//! See each item’s rustdoc for the complete method list.
+//! - [`Path`]
+//! - [`SyncFsOps`]
+//! - [`PathEntry`]
 
 #[cfg(feature = "async-fs-ops")]
 mod async_fs_ops;

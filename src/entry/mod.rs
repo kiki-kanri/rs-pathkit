@@ -1,4 +1,4 @@
-//! Directory entry wrappers for pathkit-fluent directory traversal.
+//! Directory entries with owned [`Path`](crate::Path) accessors.
 
 #[cfg(feature = "async-fs-ops")]
 pub(crate) mod r#async;

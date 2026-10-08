@@ -1,17 +1,7 @@
-//! Asynchronous file system operations module
+//! Async filesystem operations for owned paths.
 //!
-//! This module provides the `AsyncFsOps` trait for asynchronous file system operations.
-//! Requires the `async-fs-ops` feature to be enabled.
-//!
-//! # Example
-//!
-//! ```rust,ignore
-//! use pathkit::{Path, AsyncFsOps};
-//!
-//! let path = Path::new("/tmp/test.txt");
-//! path.write(b"Hello!").await?;
-//! let content = path.read().await?;
-//! ```
+//! Available with the `async-fs-ops` feature. [`AsyncFsOps`] defines the operation and
+//! cancellation contracts and is implemented for [`Path`].
 
 use std::{
     fs::{
@@ -42,31 +32,92 @@ use super::{
     entry::r#async::AsyncPathEntry,
 };
 
-/// Trait for asynchronous file system operations.
+/// Async filesystem operations for paths.
 ///
-/// This trait provides non-blocking file system operations similar to Python's pathlib.
-/// It is implemented for `Path` but can be implemented for other types as well.
+/// Available with the `async-fs-ops` feature. [`Path`] implements this trait using Tokio.
+/// For that implementation, methods borrow the stored path without changing it; their
+/// bodies run when their futures are polled, not merely when the methods are called.
+/// A Tokio runtime with blocking-task support is required for filesystem I/O. Paths are
+/// interpreted by the operating system, including relative paths resolved against the
+/// current working directory. The behavior described below applies to that implementation.
 ///
-/// Requires the `async-fs-ops` feature to be enabled.
+/// The [`Path`] implementation provides these shared behaviors:
 ///
-/// # Example
+/// - Metadata and type checks follow symlinks, except [`Self::is_symlink`]. Type checks
+///   return an error for missing paths, rather than `false`. [`Self::exists`] returns
+///   `false` for a missing target, including a dangling symlink, and propagates other
+///   inspection errors.
+/// - [`Self::get_file_size`] returns metadata length in bytes, which is not necessarily
+///   allocated disk space or a meaningful content size for non-files.
+/// - [`Self::open`] opens an existing file read-only. [`Self::open_with_options`] uses
+///   the supplied options without changing them. Returned files follow [`tokio::fs::File`]
+///   behavior: writes can remain pending after an async write completes, and flushing
+///   waits for pending I/O but does not itself guarantee persistence to disk.
+/// - [`Self::write`] and [`Self::write_json`] create or truncate a file without creating
+///   parent directories. JSON uses pretty serialization. [`Self::read_json`] deserializes
+///   the complete file contents. JSON serialization and deserialization run synchronously
+///   within the polled future.
+/// - [`Self::truncate`] opens an existing file for writing and sets its length in bytes;
+///   `None` means `0`. Extending a file fills the added range with zero bytes.
+/// - [`Self::create_parent_dir`] creates only the immediate parent and returns `true` on
+///   successful creation; an existing parent is an error. [`Self::create_parent_dir_all`]
+///   creates missing ancestors and returns `true` on success even if the parent already
+///   exists. Both return `false` when the lexical path has no parent.
+/// - [`Self::empty_dir`] creates a missing directory with its parents or removes the
+///   entries of an existing directory, keeping the directory itself. Removal is incremental
+///   and uses Tokio's file and recursive-directory removal rules.
+/// - Directory collection methods return entries in filesystem iteration order, without
+///   sorting. [`Self::read_dir_names`] converts names to strings with invalid Unicode
+///   replaced; [`Self::read_dir_paths`] and [`Self::read_dir_entries`] retain native path
+///   data. [`Self::read_dir`] returns an iterator whose later async reads can fail.
+/// - [`Self::copy_file`] copies to the exact destination, overwriting an existing file
+///   and returning the number of bytes copied. [`Self::move_to`] renames to the exact
+///   destination and returns a new [`Path`]; it does not update the source value or fall back
+///   to copying across filesystems. Replacement rules depend on the platform.
 ///
-/// ```rust,ignore
-/// use pathkit::{Path, AsyncFsOps};
+/// Unix-only methods expose permission modes, owner and group IDs, and special-file
+/// checks. For ownership changes, `None` preserves the corresponding owner or group ID.
+/// Filesystem methods otherwise follow the corresponding [`tokio::fs`] operations.
 ///
-/// let path = Path::new("/tmp/test.txt");
+/// # Errors
 ///
-/// // Check if file exists
-/// if path.exists().await? {
-///     // Read file contents
-///     let content = path.read().await?;
+/// Propagates filesystem errors such as missing paths, permission errors, invalid file
+/// or directory types, and unsupported operations. Directory collection methods also
+/// propagate iteration errors instead of returning partial collections. UTF-8 string
+/// reads fail for invalid UTF-8; JSON reads and writes also propagate deserialization
+/// or serialization errors. Unix ownership changes additionally propagate blocking-task
+/// join errors. Changes made before an error are not rolled back.
+///
+/// # Panics
+///
+/// Operations that submit blocking work can panic if polled outside a Tokio runtime.
+///
+/// # Cancellation safety
+///
+/// Dropping a future stops polling this operation but does not roll back completed
+/// filesystem changes. I/O already submitted to Tokio's blocking pool can continue.
+/// Multi-step operations, including directory creation, directory clearing, and file
+/// truncation, can leave partial changes. Collected directory entries are discarded
+/// when their collection future is dropped. Retrying a canceled operation is not an
+/// exactly-once guarantee.
+///
+/// # Examples
+///
+/// ```rust
+/// use pathkit::{
+///     AsyncFsOps,
+///     path,
+/// };
+///
+/// #[tokio::main(flavor = "current_thread")]
+/// async fn main() -> anyhow::Result<()> {
+///     let directory = tempfile::tempdir()?;
+///     let file = path!(directory.path()) / "message.txt";
+///     file.write(b"Hello!").await?;
+///     assert_eq!(file.read_to_string().await?, "Hello!");
+///     assert_eq!(file.get_file_size().await?, 6);
+///     Ok(())
 /// }
-///
-/// // Write to file
-/// path.write(b"Hello, world!").await?;
-///
-/// // Get file size
-/// let size = path.get_file_size().await?;
 /// ```
 #[async_trait::async_trait]
 pub trait AsyncFsOps {

@@ -66,19 +66,15 @@ impl AsRef<OsStr> for Path {
     }
 }
 
-/// Converts a `String` into a `Path`.
+/// An owned string-to-path conversion that consumes the string without accessing the filesystem.
 ///
-/// This allows `String` to be used wherever a `Path` is expected,
-/// such as in the `Path::new()` constructor or path joining operations.
-///
-/// # Example
+/// # Examples
 ///
 /// ```rust
 /// use pathkit::Path;
 ///
-/// let path = Path::new("test/path");
-/// let from_string: Path = Path::from(String::from("test/path"));
-/// assert_eq!(from_string.to_str(), Some("test/path"));
+/// let path = Path::from(String::from("config.json"));
+/// assert_eq!(path.as_path(), std::path::Path::new("config.json"));
 /// ```
 impl From<String> for Path {
     #[inline]
@@ -87,20 +83,18 @@ impl From<String> for Path {
     }
 }
 
-/// Converts a `Path` into a `String`.
+/// A consuming conversion into an owned, lossy Unicode path string.
 ///
-/// This conversion lossy — it returns the path's UTF-8 representation
-/// as a `String`. If the path contains invalid Unicode, non-decodable
-/// bytes are replaced with the Unicode replacement character (U+FFFD).
+/// Replaces invalid Unicode with the replacement character (`U+FFFD`). Use
+/// `std::path::PathBuf::from(path)` instead to transfer the native path data losslessly.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```rust
-/// use pathkit::Path;
+/// use pathkit::path;
 ///
-/// let path = Path::new("/test/path");
-/// let s: String = String::from(path);
-/// assert_eq!(s, "/test/path");
+/// let text = String::from(path!("config.json"));
+/// assert_eq!(text, "config.json");
 /// ```
 impl From<Path> for String {
     #[inline]
@@ -109,19 +103,23 @@ impl From<Path> for String {
     }
 }
 
-/// Allows a `Path` to be used as a `&str` via `AsRef<str>`.
+/// A borrowed UTF-8 string view of a path without copying its data.
 ///
-/// This is useful for APIs that expect `impl AsRef<str>` rather than
-/// a standard path reference.
+/// The view borrows the original path. Unlike conversion into [`String`], this does
+/// not replace invalid Unicode; [`std::path::Path::to_str`] provides a fallible alternative.
 ///
-/// # Example
+/// # Panics
+///
+/// Panics if the path is not valid UTF-8.
+///
+/// # Examples
 ///
 /// ```rust
-/// use pathkit::Path;
+/// use pathkit::path;
 ///
-/// let path = Path::new("/test/path");
-/// let s: &str = path.as_ref();
-/// assert_eq!(s, "/test/path");
+/// let path = path!("config.json");
+/// let text: &str = path.as_ref();
+/// assert_eq!(text, "config.json");
 /// ```
 impl AsRef<str> for Path {
     #[inline]
@@ -133,20 +131,21 @@ impl AsRef<str> for Path {
     }
 }
 
-/// Allows a `Path` to be used as a `PathBuf` via `AsRef<PathBuf>`.
+/// A borrowed [`std::path::PathBuf`] view without copying or converting native path data.
 ///
-/// This is useful for APIs that accept `impl AsRef<PathBuf>`, such as
-/// `copy_file_sync`, `hard_link_sync`, and `soft_link_sync`.
+/// The view borrows the original path. It does not consume the path or allow mutation
+/// of the underlying buffer.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```rust
-/// use pathkit::Path;
 /// use std::path::PathBuf;
 ///
-/// let path = Path::new("/test/path");
-/// let buf: &PathBuf = path.as_ref();
-/// assert_eq!(*buf, PathBuf::from("/test/path"));
+/// use pathkit::path;
+///
+/// let path = path!("config.json");
+/// let buffer: &PathBuf = path.as_ref();
+/// assert_eq!(buffer, &PathBuf::from("config.json"));
 /// ```
 impl AsRef<PathBuf> for Path {
     #[inline]
