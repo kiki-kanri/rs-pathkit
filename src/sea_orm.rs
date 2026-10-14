@@ -25,7 +25,7 @@
 //! let value = Value::from(path!("assets/image.png"));
 //! assert_eq!(
 //!     value,
-//!     Value::String(Some(Box::new(String::from("assets/image.png"))))
+//!     Value::String(Some(String::from("assets/image.png")))
 //! );
 //! ```
 //!
@@ -58,7 +58,7 @@ use crate::Path;
 impl From<Path> for Value {
     #[inline]
     fn from(val: Path) -> Self {
-        Value::String(Some(Box::new(val.to_string_lossy().into_owned())))
+        Value::String(Some(val.to_string_lossy().into_owned()))
     }
 }
 
