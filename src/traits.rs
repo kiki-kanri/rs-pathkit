@@ -180,11 +180,10 @@ mod tests {
     };
 
     use super::Path;
-    use crate::path;
 
     #[test]
     fn test_std_path_reference_traits() {
-        let path = path!("/test/path");
+        let path = crate::path!("/test/path");
         let expected = StdPath::new("/test/path");
 
         let as_ref: &StdPath = path.as_ref();
@@ -198,11 +197,11 @@ mod tests {
 
     #[test]
     fn test_display_formats_lossy_path() {
-        let path = path!("/test/path");
+        let path = crate::path!("/test/path");
 
         assert_eq!(path.to_string(), "/test/path");
         assert_eq!(format!("{path}"), "/test/path");
-        assert_eq!(format!("Path: {}", path!("file.txt")), "Path: file.txt");
+        assert_eq!(format!("Path: {}", crate::path!("file.txt")), "Path: file.txt");
     }
 
     #[test]
@@ -211,10 +210,10 @@ mod tests {
         let from_std_path: Path = Path::from(std_path);
         assert_eq!(from_std_path.to_str(), Some("/test/path"));
 
-        let from_pathbuf = path!(PathBuf::from("/test/path"));
+        let from_pathbuf = crate::path!(PathBuf::from("/test/path"));
         assert_eq!(from_pathbuf.to_path_buf(), PathBuf::from("/test/path"));
 
-        let path = path!("/test/path");
+        let path = crate::path!("/test/path");
         let pathbuf: PathBuf = PathBuf::from(path.clone());
         let string: String = String::from(path);
 
@@ -226,8 +225,8 @@ mod tests {
 
     #[test]
     fn test_string_views() {
-        let path = path!("/test/文件.txt");
-        let ascii = path!("/test/path");
+        let path = crate::path!("/test/文件.txt");
+        let ascii = crate::path!("/test/path");
         let borrowed_str: &str = ascii.as_ref();
 
         assert_eq!(path.to_string_lossy(), "/test/文件.txt");
@@ -244,13 +243,13 @@ mod tests {
             os::unix::ffi::OsStringExt,
         };
 
-        let path = path!(OsString::from_vec(vec![0xff]));
+        let path = crate::path!(OsString::from_vec(vec![0xff]));
         let _: &str = path.as_ref();
     }
 
     #[test]
     fn test_os_and_pathbuf_views() {
-        let path = path!("/test/path");
+        let path = crate::path!("/test/path");
         let os_str: &OsStr = path.as_ref();
         let pathbuf: &PathBuf = path.as_ref();
 
@@ -261,7 +260,7 @@ mod tests {
 
     #[test]
     fn test_path_as_ref_self() {
-        let path = path!("/test/path");
+        let path = crate::path!("/test/path");
         let path_ref: &Path = path.as_ref();
 
         assert_eq!(path_ref, &path);

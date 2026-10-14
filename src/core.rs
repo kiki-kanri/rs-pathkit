@@ -363,57 +363,56 @@ mod tests {
     use anyhow::anyhow;
 
     use super::*;
-    use crate::path;
 
     #[test]
     fn test_new() {
         // Test with &str
-        let path = path!("/test/path");
+        let path = crate::path!("/test/path");
         assert_eq!(path.to_str(), Some("/test/path"));
 
         // Test with String
-        let path = path!(String::from("/test/path"));
+        let path = crate::path!(String::from("/test/path"));
         assert_eq!(path.to_str(), Some("/test/path"));
 
         // Test with PathBuf
-        let path = path!(PathBuf::from("/test/path"));
+        let path = crate::path!(PathBuf::from("/test/path"));
         assert_eq!(path.to_str(), Some("/test/path"));
 
         // Test with OsStr
-        let path = path!(OsStr::new("/test/path"));
+        let path = crate::path!(OsStr::new("/test/path"));
         assert_eq!(path.to_str(), Some("/test/path"));
 
         // Test with OsString
-        let path = path!(OsString::from("/test/path"));
+        let path = crate::path!(OsString::from("/test/path"));
         assert_eq!(path.to_str(), Some("/test/path"));
 
         // Test with StdPath
-        let path = path!(StdPath::new("/test/path"));
+        let path = crate::path!(StdPath::new("/test/path"));
         assert_eq!(path.to_str(), Some("/test/path"));
 
         // Test with pathkit::Path reference
-        let original = path!("/test/path");
-        let path = path!(&original);
+        let original = crate::path!("/test/path");
+        let path = crate::path!(&original);
         assert_eq!(path.to_str(), Some("/test/path"));
     }
 
     #[test]
     fn test_as_path() {
-        let path = path!("/test/path");
-        let std_path: &std::path::Path = path.as_path();
-        assert_eq!(std_path, std::path::Path::new("/test/path"));
+        let path = crate::path!("/test/path");
+        let std_path: &StdPath = path.as_path();
+        assert_eq!(std_path, StdPath::new("/test/path"));
     }
 
     #[test]
     fn test_to_path_buf() {
-        let path = path!("/test/path");
+        let path = crate::path!("/test/path");
         let path_buf = path.to_path_buf();
         assert_eq!(path_buf, PathBuf::from("/test/path"));
     }
 
     #[test]
     fn test_join() {
-        let path = path!("{MAIN_SEPARATOR}base");
+        let path = crate::path!("{MAIN_SEPARATOR}base");
         assert_eq!(
             path.join("subdir").to_str(),
             Some(format!("{MAIN_SEPARATOR}base{MAIN_SEPARATOR}subdir").as_str())
@@ -426,7 +425,7 @@ mod tests {
         );
 
         // Join with Path
-        let subpath = path!("subpath");
+        let subpath = crate::path!("subpath");
         assert_eq!(
             path.join(subpath).to_str(),
             Some(format!("{MAIN_SEPARATOR}base{MAIN_SEPARATOR}subpath").as_str())
@@ -435,38 +434,38 @@ mod tests {
 
     #[test]
     fn test_parent() {
-        let path = path!("/base/subdir/file.txt");
+        let path = crate::path!("/base/subdir/file.txt");
         assert_eq!(
             path.parent().and_then(|parent| parent.to_str().map(str::to_owned)),
             Some(String::from("/base/subdir"))
         );
 
         // Test root path
-        let path = path!("/");
+        let path = crate::path!("/");
         assert!(path.parent().is_none());
 
         // Test relative path with no parent
-        let path = path!("file.txt");
+        let path = crate::path!("file.txt");
         assert!(path.parent().is_some());
     }
 
     #[test]
     fn test_with_extension() {
-        let path = path!("/path/to/file.txt");
+        let path = crate::path!("/path/to/file.txt");
         assert_eq!(path.with_extension("md").to_str(), Some("/path/to/file.md"));
 
         // Test adding extension to file without extension
-        let path = path!("/path/to/file");
+        let path = crate::path!("/path/to/file");
         assert_eq!(path.with_extension("txt").to_str(), Some("/path/to/file.txt"));
 
         // Test replacing extension
-        let path = path!("/path/to/file.txt");
+        let path = crate::path!("/path/to/file.txt");
         assert_eq!(path.with_extension("json").to_str(), Some("/path/to/file.json"));
     }
 
     #[test]
     fn test_with_file_name() {
-        let path = path!("/path/to/file.txt");
+        let path = crate::path!("/path/to/file.txt");
         let renamed: Path = path.with_file_name("other.md");
 
         let expected = format!("/path/to{MAIN_SEPARATOR}other.md");
@@ -475,12 +474,12 @@ mod tests {
 
     #[test]
     fn test_with_added_extension() {
-        let path = path!("/path/to/file.tar.gz");
+        let path = crate::path!("/path/to/file.tar.gz");
         let rotated: Path = path.with_added_extension("1");
 
         assert_eq!(rotated.to_str(), Some("/path/to/file.tar.gz.1"));
 
-        let path = path!("/path/to/file");
+        let path = crate::path!("/path/to/file");
         assert_eq!(path.with_added_extension("txt").to_str(), Some("/path/to/file.txt"));
     }
 
@@ -489,17 +488,17 @@ mod tests {
         // On Unix, /absolute/path is absolute; on Windows, only C:\path or \\server\share are absolute
         #[cfg(not(windows))]
         {
-            let path = path!("/absolute/path");
+            let path = crate::path!("/absolute/path");
             assert!(path.is_absolute());
         }
 
-        let relative_path = path!("relative/path");
+        let relative_path = crate::path!("relative/path");
         assert!(!relative_path.is_absolute());
 
         #[cfg(windows)]
         {
             // Windows-style absolute paths
-            let path = path!("C:\\absolute\\path");
+            let path = crate::path!("C:\\absolute\\path");
             assert!(path.is_absolute());
         }
     }
@@ -510,81 +509,81 @@ mod tests {
         // since it doesn't have a drive letter
         #[cfg(not(windows))]
         {
-            let path = path!("/absolute/path");
+            let path = crate::path!("/absolute/path");
             assert!(!path.is_relative());
         }
 
-        let relative_path = path!("relative/path");
+        let relative_path = crate::path!("relative/path");
         assert!(relative_path.is_relative());
 
         #[cfg(windows)]
         {
             // Windows-style absolute paths are not relative
-            let path = path!("C:\\absolute\\path");
+            let path = crate::path!("C:\\absolute\\path");
             assert!(!path.is_relative());
         }
     }
 
     #[test]
     fn test_file_name() {
-        let path = path!("/path/to/file.txt");
+        let path = crate::path!("/path/to/file.txt");
         assert_eq!(path.file_name(), Some(OsStr::new("file.txt")));
 
         // Note: std::path::Path ignores trailing slash and returns the last component
-        let path = path!("/path/to/");
+        let path = crate::path!("/path/to/");
         assert_eq!(path.file_name(), Some(OsStr::new("to")));
 
-        let path = path!("/");
+        let path = crate::path!("/");
         assert_eq!(path.file_name(), None);
     }
 
     #[test]
     fn test_file_stem() {
-        let path = path!("file.txt");
+        let path = crate::path!("file.txt");
         assert_eq!(path.file_stem(), Some(OsStr::new("file")));
 
-        let path = path!(".hidden");
+        let path = crate::path!(".hidden");
         assert_eq!(path.file_stem(), Some(OsStr::new(".hidden")));
 
-        let path = path!("file.tar.gz");
+        let path = crate::path!("file.tar.gz");
         assert_eq!(path.file_stem(), Some(OsStr::new("file.tar")));
     }
 
     #[test]
     fn test_extension() {
-        let path = path!("file.txt");
+        let path = crate::path!("file.txt");
         assert_eq!(path.extension(), Some(OsStr::new("txt")));
 
-        let path = path!("file.tar.gz");
+        let path = crate::path!("file.tar.gz");
         assert_eq!(path.extension(), Some(OsStr::new("gz")));
 
-        let path = path!("file");
+        let path = crate::path!("file");
         assert_eq!(path.extension(), None);
 
-        let path = path!("/path/to.");
+        let path = crate::path!("/path/to.");
         assert_eq!(path.extension(), Some(OsStr::new("")));
     }
 
     #[test]
     fn test_starts_with() {
-        let path = path!("/path/to/file");
+        let path = crate::path!("/path/to/file");
         // starts_with is part of std::path::Path, available through Deref
         assert!(path.starts_with("/path"));
-        assert!(path.starts_with(std::path::Path::new("/path")));
+        assert!(path.starts_with(StdPath::new("/path")));
         assert!(!path.starts_with("/other"));
     }
 
     #[test]
     fn test_ends_with() {
-        let path = path!("/path/to/file.txt");
+        let path = crate::path!("/path/to/file.txt");
         assert!(path.ends_with("file.txt"));
-        assert!(path.ends_with(std::path::Path::new("to/file.txt")));
+        assert!(path.ends_with(StdPath::new("to/file.txt")));
         assert!(!path.ends_with("other.txt"));
     }
 
     #[test]
     fn test_path_component_iteration() {
-        let path = path!("/path/to/file.txt");
+        let path = crate::path!("/path/to/file.txt");
         let components: Vec<_> = path.components().collect();
         let iter_components: Vec<_> = path.iter().collect();
 
@@ -601,7 +600,7 @@ mod tests {
     #[test]
     fn test_absolute_path_functionality() -> Result<()> {
         // Test absolutize
-        let path = path!(".");
+        let path = crate::path!(".");
         let absolute = path.absolutize()?;
         assert!(absolute.is_absolute());
 
@@ -610,7 +609,7 @@ mod tests {
 
     #[test]
     fn test_absolutize_from() -> Result<()> {
-        let path = path!("subdir");
+        let path = crate::path!("subdir");
         let absolute = path.absolutize_from(format!("{MAIN_SEPARATOR}base"))?;
         // Check that the result ends with the joined path (handles platform-specific separators)
         assert!(
@@ -624,7 +623,7 @@ mod tests {
 
     #[test]
     fn test_absolutize_virtually() -> Result<()> {
-        let path = path!("subdir/file.txt");
+        let path = crate::path!("subdir/file.txt");
         let absolute = path.absolutize_virtually("/virtual")?;
         // Check that the result contains the virtual root and subdir (handles platform-specific separators)
         let abs_str = absolute
@@ -640,7 +639,7 @@ mod tests {
 
     #[test]
     fn test_canonicalize() -> Result<()> {
-        let path = path!(".");
+        let path = crate::path!(".");
         let canonical = path.canonicalize()?;
         assert!(canonical.is_absolute());
 
@@ -649,20 +648,20 @@ mod tests {
 
     #[test]
     fn test_display() {
-        let path = path!("/test/path");
+        let path = crate::path!("/test/path");
         assert_eq!(format!("{path}"), "/test/path");
     }
 
     #[test]
     fn test_from_pathbuf() {
         let pathbuf = PathBuf::from("/test/path");
-        let path = path!(pathbuf);
+        let path = crate::path!(pathbuf);
         assert_eq!(path.to_path_buf(), PathBuf::from("/test/path"));
     }
 
     #[test]
     fn test_from_std_path() {
-        let std_path = std::path::Path::new("/test/path");
+        let std_path = StdPath::new("/test/path");
         let path = Path::from(std_path);
         assert_eq!(path.to_str(), Some("/test/path"));
     }

@@ -20,16 +20,20 @@ use serde_json::{
     from_slice,
     to_vec_pretty,
 };
-use tokio::fs::{
-    self,
-    File,
-    OpenOptions,
-    ReadDir,
+use tokio::{
+    fs::{
+        self,
+        File,
+        OpenOptions,
+        ReadDir,
+    },
+    task::spawn_blocking,
 };
 
 use super::{
     core::Path,
     entry::r#async::AsyncPathEntry,
+    sync_fs_ops::SyncFsOps,
 };
 
 /// Async filesystem operations for paths.
@@ -75,6 +79,9 @@ use super::{
 ///   and returning the number of bytes copied. [`Self::move_to`] renames to the exact
 ///   destination and returns a new [`Path`]; it does not update the source value or fall back
 ///   to copying across filesystems. Replacement rules depend on the platform.
+///   [`Self::replace_file`] replaces the exact destination with this source file and returns
+///   the destination path. It leaves this path unchanged, does not preserve the replaced
+///   file's metadata, and does not fall back to copying across filesystems.
 ///
 /// Unix-only methods expose permission modes, owner and group IDs, and special-file
 /// checks. For ownership changes, `None` preserves the corresponding owner or group ID.
@@ -159,6 +166,7 @@ pub trait AsyncFsOps {
     async fn remove_dir_all(&self) -> Result<()>;
     async fn remove_dir(&self) -> Result<()>;
     async fn remove_file(&self) -> Result<()>;
+    async fn replace_file(&self, dest: impl AsRef<StdPath> + Send) -> Result<Path>;
     async fn set_permissions(&self, permissions: Permissions) -> Result<()>;
     async fn truncate(&self, len: Option<u64>) -> Result<()>;
     async fn write_json<T: Serialize + Send>(&self, data: T) -> Result<()>;
@@ -293,9 +301,8 @@ impl AsyncFsOps for Path {
     }
 
     async fn move_to(&self, dest: impl AsRef<StdPath> + Send) -> Result<Path> {
-        let dest = Path::new(dest);
-        fs::rename(self, &dest).await?;
-        Ok(dest)
+        fs::rename(self, dest.as_ref()).await?;
+        Ok(crate::path!(dest))
     }
 
     async fn open(&self) -> Result<File> {
@@ -362,6 +369,12 @@ impl AsyncFsOps for Path {
 
     async fn remove_dir_all(&self) -> Result<()> {
         Ok(fs::remove_dir_all(self).await?)
+    }
+
+    async fn replace_file(&self, dest: impl AsRef<StdPath> + Send) -> Result<Path> {
+        let source = self.clone();
+        let dest = crate::path!(dest);
+        Ok(spawn_blocking(move || source.replace_file_sync(dest)).await??)
     }
 
     async fn set_permissions(&self, permissions: Permissions) -> Result<()> {

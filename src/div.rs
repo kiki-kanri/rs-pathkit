@@ -118,13 +118,11 @@ impl Div<String> for Path {
 
 #[cfg(test)]
 mod tests {
-    use crate::path;
-
     #[test]
     fn test_div_accepts_path_variants() {
-        let base = path!("/test/path");
-        let subpath = path!("subpath");
-        let expected = path!("/test/path/subpath");
+        let base = crate::path!("/test/path");
+        let subpath = crate::path!("subpath");
+        let expected = crate::path!("/test/path/subpath");
 
         assert_eq!(&base / &subpath, expected);
         assert_eq!(&base / subpath.clone(), expected);
@@ -134,9 +132,9 @@ mod tests {
 
     #[test]
     fn test_div_accepts_string_variants() {
-        let base = path!("/test/path");
+        let base = crate::path!("/test/path");
         let subpath = String::from("subpath");
-        let expected = path!("/test/path/subpath");
+        let expected = crate::path!("/test/path/subpath");
 
         assert_eq!(&base / "subpath", expected);
         assert_eq!(&base / subpath.clone(), expected);
@@ -149,22 +147,25 @@ mod tests {
     #[test]
     fn test_div_chains_and_accepts_embedded_separators() {
         assert_eq!(
-            path!("/test") / "path" / "to" / "file.txt",
-            path!("/test/path/to/file.txt")
+            crate::path!("/test") / "path" / "to" / "file.txt",
+            crate::path!("/test/path/to/file.txt")
         );
 
-        assert_eq!(path!("/test/path") / "", path!("/test/path"));
-        assert_eq!(path!("/test/path") / "to/file.txt", path!("/test/path/to/file.txt"));
+        assert_eq!(crate::path!("/test/path") / "", crate::path!("/test/path"));
+        assert_eq!(
+            crate::path!("/test/path") / "to/file.txt",
+            crate::path!("/test/path/to/file.txt")
+        );
     }
 
     #[test]
     fn test_div_preserves_original_path() {
-        let original = path!("/test/path");
+        let original = crate::path!("/test/path");
 
         let owned_result = original.clone() / "subpath";
         let borrowed_result = &original / "subpath";
 
         assert_eq!(owned_result, borrowed_result);
-        assert_eq!(original, path!("/test/path"));
+        assert_eq!(original, crate::path!("/test/path"));
     }
 }

@@ -133,7 +133,6 @@ pub(crate) mod tests {
     };
 
     use super::*;
-    use crate::path;
 
     // -------------------------------------------------------------------
     // Compile-check models using DeriveEntityModel with Path fields
@@ -159,8 +158,8 @@ pub(crate) mod tests {
 
         #[tokio::test]
         async fn test_try_getable_path_from_query_result() -> Result<()> {
-            let path = path!("/tmp/file.txt");
-            let display_name = path!("file.txt");
+            let path = crate::path!("/tmp/file.txt");
+            let display_name = crate::path!("file.txt");
             let db = MockDatabase::new(DbBackend::Postgres)
                 .append_query_results([[Model {
                     id: 1,
@@ -208,7 +207,7 @@ pub(crate) mod tests {
     #[test]
     fn test_into_value_roundtrip_tempdir() -> Result<()> {
         let temp_dir = tempdir()?;
-        let path = path!(&temp_dir);
+        let path = crate::path!(&temp_dir);
 
         // Path -> Value -> Path roundtrip
         let value: Value = path.clone().into();
@@ -247,7 +246,7 @@ pub(crate) mod tests {
     #[test]
     fn test_path_with_unicode() -> Result<()> {
         let temp_dir = tempdir()?;
-        let path = path!(&temp_dir) / "文件" / "日本語.txt";
+        let path = crate::path!(&temp_dir) / "文件" / "日本語.txt";
 
         let value: Value = path.clone().into();
         let recovered =
@@ -260,7 +259,7 @@ pub(crate) mod tests {
     #[test]
     fn test_into_value_named_temp_file() -> Result<()> {
         let temp_file = NamedTempFile::new()?;
-        let path = path!(&temp_file);
+        let path = crate::path!(&temp_file);
 
         let value: Value = path.clone().into();
         assert!(
