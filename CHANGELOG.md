@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.6.0
+
+[compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v1.5.0...v1.6.0)
+
+### 🚀 Enhancements
+
+- **fs:** Add cross-platform file replacement ([8ef352f](https://github.com/kiki-kanri/rs-pathkit/commit/8ef352f))
+
+### 🏡 Chore
+
+- Update `modify-files-permissions.sh` ([5fcc07d](https://github.com/kiki-kanri/rs-pathkit/commit/5fcc07d))
+- Upgrade deps ([d56ba0f](https://github.com/kiki-kanri/rs-pathkit/commit/d56ba0f))
+
+### ❤️ Contributors
+
+- Kiki-kanri
+
 ## v1.5.0
 
 [compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v1.4.3...v1.5.0)
