@@ -101,7 +101,8 @@ Use `open_with_options()` when you need custom `tokio::fs::OpenOptions`.
 
 ### SeaORM Integration
 
-Requires the `sea-orm` feature. `Path` is stored as `String` and can be used directly in SeaORM models:
+Requires the `sea-orm` feature and SeaORM 2.0.4 or a compatible later 2.x release.
+`Path` is stored as `String` and can be used directly in SeaORM models:
 
 ```rust
 use pathkit::Path;
