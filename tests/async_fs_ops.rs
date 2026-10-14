@@ -607,22 +607,6 @@ async fn test_rename_to_renames_file() -> Result<()> {
 }
 
 #[tokio::test]
-async fn test_replace_file_replaces_existing_file() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let src = path!(&temp_dir) / "source.txt";
-    let dest = path!(&temp_dir) / "dest.txt";
-
-    src.write(b"replacement content").await?;
-    dest.write(b"original content").await?;
-    let replaced = src.replace_file(&dest).await?;
-
-    assert_eq!(replaced, dest);
-    assert!(!src.exists().await?);
-    assert_eq!(dest.read().await?, b"replacement content");
-    Ok(())
-}
-
-#[tokio::test]
 async fn test_rename_to_renames_dir() -> Result<()> {
     let temp_dir = tempdir()?;
     let src = path!(&temp_dir) / "source-dir";

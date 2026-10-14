@@ -76,9 +76,6 @@ use super::{
 ///   and returning the number of bytes copied. [`Self::rename_to_sync`] renames to the exact
 ///   destination and returns a new [`Path`]; it does not update the source value or fall back
 ///   to copying across filesystems. Replacement rules depend on the platform.
-///   [`Self::replace_file_sync`] replaces the exact destination with this source file and
-///   returns the destination path. It leaves this path unchanged, does not preserve the
-///   replaced file's metadata, and does not fall back to copying across filesystems.
 /// - Link methods use `self` as the source or target and `link` as the new link path.
 ///   [`Self::hard_link_sync`] requires filesystem support. Unix-only symbolic-link methods
 ///   store the target as supplied and return the stored target without resolving it.
@@ -151,7 +148,6 @@ pub trait SyncFsOps {
     fn remove_dir_sync(&self) -> Result<()>;
     fn remove_file_sync(&self) -> Result<()>;
     fn rename_to_sync(&self, dest: impl AsRef<StdPath>) -> Result<Path>;
-    fn replace_file_sync(&self, dest: impl AsRef<StdPath>) -> Result<Path>;
     fn set_permissions_sync(&self, permissions: Permissions) -> Result<()>;
     #[cfg(unix)]
     fn soft_link_sync(&self, link: impl AsRef<StdPath>) -> Result<()>;
@@ -349,37 +345,6 @@ impl SyncFsOps for Path {
     fn rename_to_sync(&self, dest: impl AsRef<StdPath>) -> Result<Path> {
         fs::rename(self, &dest)?;
         Ok(crate::path!(dest))
-    }
-
-    fn replace_file_sync(&self, dest: impl AsRef<StdPath>) -> Result<Path> {
-        let dest = crate::path!(dest);
-
-        #[cfg(not(windows))]
-        self.rename_to_sync(&dest)?;
-
-        #[cfg(windows)]
-        {
-            use std::{
-                io::Error as IoError,
-                os::windows::ffi::OsStrExt,
-            };
-
-            use windows_sys::Win32::Storage::FileSystem::{
-                MOVEFILE_REPLACE_EXISTING,
-                MoveFileExW,
-            };
-
-            let source = self.as_path().as_os_str().encode_wide().chain([0]).collect::<Vec<_>>();
-            let dest_wide = dest.as_path().as_os_str().encode_wide().chain([0]).collect::<Vec<_>>();
-
-            // SAFETY: both paths are NUL-terminated UTF-16 strings that remain alive for this call.
-            let result = unsafe { MoveFileExW(source.as_ptr(), dest_wide.as_ptr(), MOVEFILE_REPLACE_EXISTING) };
-            if result == 0 {
-                return Err(IoError::last_os_error().into());
-            }
-        }
-
-        Ok(dest)
     }
 
     fn set_permissions_sync(&self, permissions: Permissions) -> Result<()> {

@@ -724,22 +724,6 @@ fn test_rename_to_sync_renames_file() -> Result<()> {
 }
 
 #[test]
-fn test_replace_file_sync_replaces_existing_file() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let src = path!(&temp_dir) / "source.txt";
-    let dest = path!(&temp_dir) / "dest.txt";
-
-    src.write_sync(b"replacement content")?;
-    dest.write_sync(b"original content")?;
-    let replaced = src.replace_file_sync(&dest)?;
-
-    assert_eq!(replaced, dest);
-    assert!(!src.exists_sync()?);
-    assert_eq!(dest.read_sync()?, b"replacement content");
-    Ok(())
-}
-
-#[test]
 fn test_rename_to_sync_renames_dir() -> Result<()> {
     let temp_dir = tempdir()?;
     let src = path!(&temp_dir) / "source-dir";
