@@ -708,13 +708,13 @@ fn test_empty_dir_sync_creates_dir_if_missing() -> Result<()> {
 }
 
 #[test]
-fn test_move_to_sync_moves_file() -> Result<()> {
+fn test_rename_to_sync_renames_file() -> Result<()> {
     let temp_dir = tempdir()?;
     let src = path!(&temp_dir) / "source.txt";
     let dest = path!(&temp_dir) / "dest.txt";
 
     src.write_sync(b"move test")?;
-    let moved = src.move_to_sync(&dest)?;
+    let moved = src.rename_to_sync(&dest)?;
 
     assert_eq!(moved, dest);
     assert!(!src.exists_sync()?);
@@ -740,7 +740,7 @@ fn test_replace_file_sync_replaces_existing_file() -> Result<()> {
 }
 
 #[test]
-fn test_move_to_sync_moves_dir() -> Result<()> {
+fn test_rename_to_sync_renames_dir() -> Result<()> {
     let temp_dir = tempdir()?;
     let src = path!(&temp_dir) / "source-dir";
     let nested = &src / "nested.txt";
@@ -748,7 +748,7 @@ fn test_move_to_sync_moves_dir() -> Result<()> {
 
     src.create_dir_sync()?;
     nested.write_sync(b"nested")?;
-    let moved = src.move_to_sync(&dest)?;
+    let moved = src.rename_to_sync(&dest)?;
 
     assert_eq!(moved, dest);
     assert!(!src.exists_sync()?);

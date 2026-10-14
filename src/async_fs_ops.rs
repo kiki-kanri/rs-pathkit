@@ -76,7 +76,7 @@ use super::{
 ///   replaced; [`Self::read_dir_paths`] and [`Self::read_dir_entries`] retain native path
 ///   data. [`Self::read_dir`] returns an iterator whose later async reads can fail.
 /// - [`Self::copy_file`] copies to the exact destination, overwriting an existing file
-///   and returning the number of bytes copied. [`Self::move_to`] renames to the exact
+///   and returning the number of bytes copied. [`Self::rename_to`] renames to the exact
 ///   destination and returns a new [`Path`]; it does not update the source value or fall back
 ///   to copying across filesystems. Replacement rules depend on the platform.
 ///   [`Self::replace_file`] replaces the exact destination with this source file and returns
@@ -153,7 +153,6 @@ pub trait AsyncFsOps {
     async fn is_socket(&self) -> Result<bool>;
     async fn is_symlink(&self) -> Result<bool>;
     async fn metadata(&self) -> Result<Metadata>;
-    async fn move_to(&self, dest: impl AsRef<StdPath> + Send) -> Result<Path>;
     async fn open(&self) -> Result<File>;
     async fn open_with_options(&self, options: &OpenOptions) -> Result<File>;
     async fn read_dir(&self) -> Result<ReadDir>;
@@ -166,6 +165,7 @@ pub trait AsyncFsOps {
     async fn remove_dir_all(&self) -> Result<()>;
     async fn remove_dir(&self) -> Result<()>;
     async fn remove_file(&self) -> Result<()>;
+    async fn rename_to(&self, dest: impl AsRef<StdPath> + Send) -> Result<Path>;
     async fn replace_file(&self, dest: impl AsRef<StdPath> + Send) -> Result<Path>;
     async fn set_permissions(&self, permissions: Permissions) -> Result<()>;
     async fn truncate(&self, len: Option<u64>) -> Result<()>;
@@ -300,11 +300,6 @@ impl AsyncFsOps for Path {
         Ok(fs::metadata(self).await?)
     }
 
-    async fn move_to(&self, dest: impl AsRef<StdPath> + Send) -> Result<Path> {
-        fs::rename(self, dest.as_ref()).await?;
-        Ok(crate::path!(dest))
-    }
-
     async fn open(&self) -> Result<File> {
         Ok(File::open(self).await?)
     }
@@ -369,6 +364,11 @@ impl AsyncFsOps for Path {
 
     async fn remove_dir_all(&self) -> Result<()> {
         Ok(fs::remove_dir_all(self).await?)
+    }
+
+    async fn rename_to(&self, dest: impl AsRef<StdPath> + Send) -> Result<Path> {
+        fs::rename(self, dest.as_ref()).await?;
+        Ok(crate::path!(dest))
     }
 
     async fn replace_file(&self, dest: impl AsRef<StdPath> + Send) -> Result<Path> {

@@ -71,7 +71,7 @@ if path.exists_sync()? {
     println!("File size: {}", path.get_file_size_sync()?);
 }
 
-let moved = path.move_to_sync("/tmp/moved.txt")?;
+let moved = path.rename_to_sync("/tmp/moved.txt")?;
 let config: Config = moved.read_json_sync()?;
 ```
 
@@ -94,7 +94,7 @@ let content = path.read().await?;
 let file = path.open().await?;
 
 path.create_parent_dir_all().await?;
-let moved = path.move_to("/tmp/moved.txt").await?;
+let moved = path.rename_to("/tmp/moved.txt").await?;
 ```
 
 Use `open_with_options()` when you need custom `tokio::fs::OpenOptions`.

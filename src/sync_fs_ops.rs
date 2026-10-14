@@ -73,7 +73,7 @@ use super::{
 ///   replaced; [`Self::read_dir_paths_sync`] and [`Self::read_dir_entries_sync`] retain
 ///   native path data. [`Self::read_dir_sync`] returns a lazy iterator whose entries can fail.
 /// - [`Self::copy_file_sync`] copies to the exact destination, overwriting an existing file
-///   and returning the number of bytes copied. [`Self::move_to_sync`] renames to the exact
+///   and returning the number of bytes copied. [`Self::rename_to_sync`] renames to the exact
 ///   destination and returns a new [`Path`]; it does not update the source value or fall back
 ///   to copying across filesystems. Replacement rules depend on the platform.
 ///   [`Self::replace_file_sync`] replaces the exact destination with this source file and
@@ -136,7 +136,6 @@ pub trait SyncFsOps {
     fn is_socket_sync(&self) -> Result<bool>;
     fn is_symlink_sync(&self) -> Result<bool>;
     fn metadata_sync(&self) -> Result<Metadata>;
-    fn move_to_sync(&self, dest: impl AsRef<StdPath>) -> Result<Path>;
     fn open_sync(&self) -> Result<File>;
     fn open_with_options_sync(&self, options: &OpenOptions) -> Result<File>;
     fn read_dir_entries_sync(&self) -> Result<Vec<PathEntry>>;
@@ -151,6 +150,7 @@ pub trait SyncFsOps {
     fn remove_dir_all_sync(&self) -> Result<()>;
     fn remove_dir_sync(&self) -> Result<()>;
     fn remove_file_sync(&self) -> Result<()>;
+    fn rename_to_sync(&self, dest: impl AsRef<StdPath>) -> Result<Path>;
     fn replace_file_sync(&self, dest: impl AsRef<StdPath>) -> Result<Path>;
     fn set_permissions_sync(&self, permissions: Permissions) -> Result<()>;
     #[cfg(unix)]
@@ -278,11 +278,6 @@ impl SyncFsOps for Path {
         Ok(fs::metadata(self)?)
     }
 
-    fn move_to_sync(&self, dest: impl AsRef<StdPath>) -> Result<Path> {
-        fs::rename(self, &dest)?;
-        Ok(crate::path!(dest))
-    }
-
     fn open_sync(&self) -> Result<File> {
         Ok(File::open(self)?)
     }
@@ -351,11 +346,16 @@ impl SyncFsOps for Path {
         Ok(fs::remove_file(self)?)
     }
 
+    fn rename_to_sync(&self, dest: impl AsRef<StdPath>) -> Result<Path> {
+        fs::rename(self, &dest)?;
+        Ok(crate::path!(dest))
+    }
+
     fn replace_file_sync(&self, dest: impl AsRef<StdPath>) -> Result<Path> {
         let dest = crate::path!(dest);
 
         #[cfg(not(windows))]
-        self.move_to_sync(&dest)?;
+        self.rename_to_sync(&dest)?;
 
         #[cfg(windows)]
         {

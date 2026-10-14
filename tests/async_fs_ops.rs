@@ -591,13 +591,13 @@ async fn test_copy_file() -> Result<()> {
 }
 
 #[tokio::test]
-async fn test_move_to_moves_file() -> Result<()> {
+async fn test_rename_to_renames_file() -> Result<()> {
     let temp_dir = tempdir()?;
     let src = path!(&temp_dir) / "source.txt";
     let dest = path!(&temp_dir) / "dest.txt";
 
     src.write(b"move test").await?;
-    let moved = src.move_to(&dest).await?;
+    let moved = src.rename_to(&dest).await?;
 
     assert_eq!(moved, dest);
     assert!(!src.exists().await?);
@@ -623,7 +623,7 @@ async fn test_replace_file_replaces_existing_file() -> Result<()> {
 }
 
 #[tokio::test]
-async fn test_move_to_moves_dir() -> Result<()> {
+async fn test_rename_to_renames_dir() -> Result<()> {
     let temp_dir = tempdir()?;
     let src = path!(&temp_dir) / "source-dir";
     let nested = &src / "nested.txt";
@@ -631,7 +631,7 @@ async fn test_move_to_moves_dir() -> Result<()> {
 
     src.create_dir().await?;
     nested.write(b"nested").await?;
-    let moved = src.move_to(&dest).await?;
+    let moved = src.rename_to(&dest).await?;
 
     assert_eq!(moved, dest);
     assert!(!src.exists().await?);
