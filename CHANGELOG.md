@@ -1,5 +1,32 @@
 # Changelog
 
+## v2.0.0
+
+[compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v1.6.0...v2.0.0)
+
+### 🚀 Enhancements
+
+- **sea-orm:** ⚠️  Upgrade integration to 2.0.4 ([870431a](https://github.com/kiki-kanri/rs-pathkit/commit/870431a))
+
+### 💅 Refactors
+
+- **fs:** ⚠️  Rename move_to to rename_to ([97c7956](https://github.com/kiki-kanri/rs-pathkit/commit/97c7956))
+- **fs:** ⚠️  Remove replace_file operations ([acce5ad](https://github.com/kiki-kanri/rs-pathkit/commit/acce5ad))
+
+### 📖 Documentation
+
+- **readme:** Document SeaORM version requirement ([e92a872](https://github.com/kiki-kanri/rs-pathkit/commit/e92a872))
+
+#### ⚠️ Breaking Changes
+
+- **sea-orm:** ⚠️  Upgrade integration to 2.0.4 ([870431a](https://github.com/kiki-kanri/rs-pathkit/commit/870431a))
+- **fs:** ⚠️  Rename move_to to rename_to ([97c7956](https://github.com/kiki-kanri/rs-pathkit/commit/97c7956))
+- **fs:** ⚠️  Remove replace_file operations ([acce5ad](https://github.com/kiki-kanri/rs-pathkit/commit/acce5ad))
+
+### ❤️ Contributors
+
+- Kiki-kanri
+
 ## v1.6.0
 
 [compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v1.5.0...v1.6.0)
