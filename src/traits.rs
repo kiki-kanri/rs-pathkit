@@ -13,7 +13,7 @@ use std::{
     },
 };
 
-use super::core::Path;
+use crate::core::Path;
 
 impl AsRef<StdPath> for Path {
     #[inline]

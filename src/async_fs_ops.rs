@@ -27,7 +27,7 @@ use tokio::fs::{
     ReadDir,
 };
 
-use super::{
+use crate::{
     core::Path,
     entry::r#async::AsyncPathEntry,
 };
@@ -124,44 +124,78 @@ use super::{
 pub trait AsyncFsOps {
     #[cfg(unix)]
     async fn chmod(&self, mode: u32) -> Result<()>;
+
     #[cfg(unix)]
     async fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> Result<()>;
+
     async fn copy_file(&self, dest: impl AsRef<StdPath> + Send) -> Result<u64>;
+
     async fn create_dir_all(&self) -> Result<()>;
+
     async fn create_dir(&self) -> Result<()>;
+
     async fn create_parent_dir_all(&self) -> Result<bool>;
+
     async fn create_parent_dir(&self) -> Result<bool>;
+
     async fn empty_dir(&self) -> Result<()>;
+
     async fn exists(&self) -> Result<bool>;
+
     async fn get_file_size(&self) -> Result<u64>;
+
     #[cfg(unix)]
     async fn is_block_device(&self) -> Result<bool>;
+
     #[cfg(unix)]
     async fn is_char_device(&self) -> Result<bool>;
+
     async fn is_dir(&self) -> Result<bool>;
+
     #[cfg(unix)]
     async fn is_fifo(&self) -> Result<bool>;
+
     async fn is_file(&self) -> Result<bool>;
+
     #[cfg(unix)]
     async fn is_socket(&self) -> Result<bool>;
+
     async fn is_symlink(&self) -> Result<bool>;
+
     async fn metadata(&self) -> Result<Metadata>;
+
     async fn open(&self) -> Result<File>;
+
     async fn open_with_options(&self, options: &OpenOptions) -> Result<File>;
+
     async fn read_dir(&self) -> Result<ReadDir>;
+
     async fn read_dir_entries(&self) -> Result<Vec<AsyncPathEntry>>;
+
     async fn read_dir_names(&self) -> Result<Vec<String>>;
+
     async fn read_dir_paths(&self) -> Result<Vec<Path>>;
+
     async fn read_json<T: DeserializeOwned>(&self) -> Result<T>;
+
     async fn read(&self) -> Result<Vec<u8>>;
+
     async fn read_to_string(&self) -> Result<String>;
+
     async fn remove_dir_all(&self) -> Result<()>;
+
     async fn remove_dir(&self) -> Result<()>;
+
     async fn remove_file(&self) -> Result<()>;
+
     async fn rename_to(&self, dest: impl AsRef<StdPath> + Send) -> Result<Path>;
+
     async fn set_permissions(&self, permissions: Permissions) -> Result<()>;
+
     async fn truncate(&self, len: Option<u64>) -> Result<()>;
+
     async fn write_json<T: Serialize + Send>(&self, data: T) -> Result<()>;
+
     async fn write(&self, contents: impl AsRef<[u8]> + Send) -> Result<()>;
 }
 

@@ -1,6 +1,6 @@
 use std::ops::Div;
 
-use super::core::Path;
+use crate::core::Path;
 
 impl Div<&Path> for &Path {
     type Output = Path;

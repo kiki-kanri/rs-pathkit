@@ -236,7 +236,7 @@ async fn test_truncate() -> Result<()> {
 // Test read_json and write_json
 #[tokio::test]
 async fn test_read_write_json() -> Result<()> {
-    #[derive(Debug, Serialize, Deserialize, PartialEq)]
+    #[derive(Debug, PartialEq, Serialize, Deserialize)]
     struct TestData {
         name: String,
         value: i32,
@@ -246,7 +246,7 @@ async fn test_read_write_json() -> Result<()> {
     let file_path = path!(&temp_file);
 
     let original = TestData {
-        name: "test".to_string(),
+        name: "test".to_owned(),
         value: 42,
     };
 
@@ -293,8 +293,8 @@ async fn test_read_dir_entries() -> Result<()> {
         .filter_map(|p| p.file_name().map(|name| name.to_string_lossy().to_string()))
         .collect();
 
-    assert!(path_strings.contains(&"file1.txt".to_string()));
-    assert!(path_strings.contains(&"file2.txt".to_string()));
+    assert!(path_strings.contains(&"file1.txt".to_owned()));
+    assert!(path_strings.contains(&"file2.txt".to_owned()));
 
     Ok(())
 }
@@ -329,6 +329,7 @@ async fn test_read_dir_paths() -> Result<()> {
     for path in &paths {
         assert!(path.is_absolute());
     }
+
     Ok(())
 }
 

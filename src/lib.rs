@@ -80,10 +80,10 @@ mod sync_fs_ops;
 mod traits;
 
 #[cfg(feature = "async-fs-ops")]
-pub use crate::async_fs_ops::AsyncFsOps;
+pub use self::async_fs_ops::AsyncFsOps;
 #[cfg(feature = "async-fs-ops")]
-pub use crate::entry::r#async::AsyncPathEntry;
-pub use crate::{
+pub use self::entry::r#async::AsyncPathEntry;
+pub use self::{
     core::Path,
     entry::sync::PathEntry,
     sync_fs_ops::SyncFsOps,

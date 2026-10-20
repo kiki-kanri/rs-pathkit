@@ -276,7 +276,7 @@ pub(crate) mod tests {
 
     #[test]
     fn test_file_model_path_column_is_string() {
-        use file_model::Entity as FileEntity;
+        use self::file_model::Entity as FileEntity;
 
         // Column enum variant exists and is accessible — compile-check only
         let _ = <FileEntity as EntityTrait>::Column::Path;
@@ -284,14 +284,14 @@ pub(crate) mod tests {
 
     #[test]
     fn test_file_model_option_path_column_is_string() {
-        use file_model::Entity as FileEntity;
+        use self::file_model::Entity as FileEntity;
 
         let _ = <FileEntity as EntityTrait>::Column::DisplayName;
     }
 
     #[test]
     fn test_asset_model_multiple_paths() {
-        use asset_model::Entity as AssetEntity;
+        use self::asset_model::Entity as AssetEntity;
 
         // All Path columns compile correctly
         let _ = <AssetEntity as EntityTrait>::Column::SourcePath;

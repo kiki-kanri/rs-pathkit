@@ -239,7 +239,7 @@ fn test_truncate_sync() -> Result<()> {
 // Test read_json_sync and write_json_sync
 #[test]
 fn test_read_write_json_sync() -> Result<()> {
-    #[derive(Debug, Serialize, Deserialize, PartialEq)]
+    #[derive(Debug, PartialEq, Serialize, Deserialize)]
     struct TestData {
         name: String,
         value: i32,
@@ -249,7 +249,7 @@ fn test_read_write_json_sync() -> Result<()> {
     let file_path = path!(&temp_file);
 
     let original = TestData {
-        name: "test".to_string(),
+        name: "test".to_owned(),
         value: 42,
     };
 
@@ -376,6 +376,7 @@ fn test_is_block_device_sync() -> Result<()> {
         // May fail if not root or device doesn't exist
         let _ = path.is_block_device_sync();
     }
+
     Ok(())
 }
 
@@ -390,6 +391,7 @@ fn test_is_char_device_sync() -> Result<()> {
     if path.exists_sync()? {
         assert!(path.is_char_device_sync()?);
     }
+
     Ok(())
 }
 
@@ -574,6 +576,7 @@ fn test_touch_sync_preserves_concurrently_written_content() -> Result<()> {
 
         assert_eq!(fs::read(&file)?, b"preserved content");
     }
+
     Ok(())
 }
 

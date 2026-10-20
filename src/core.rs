@@ -56,7 +56,7 @@ use serde::{
 ///
 /// - [`crate::SyncFsOps`]
 /// - [`crate::PathEntry`]
-#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Path(pub(crate) PathBuf);
 

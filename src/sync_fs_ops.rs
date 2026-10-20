@@ -29,7 +29,7 @@ use serde_json::{
     to_vec_pretty,
 };
 
-use super::{
+use crate::{
     core::Path,
     entry::sync::PathEntry,
 };
@@ -110,51 +110,90 @@ use super::{
 pub trait SyncFsOps {
     #[cfg(unix)]
     fn chmod_sync(&self, mode: u32) -> Result<()>;
+
     #[cfg(unix)]
     fn chown_sync(&self, uid: Option<u32>, gid: Option<u32>) -> Result<()>;
+
     fn copy_file_sync(&self, dest: impl AsRef<StdPath>) -> Result<u64>;
+
     fn create_dir_all_sync(&self) -> Result<()>;
+
     fn create_dir_sync(&self) -> Result<()>;
+
     fn create_parent_dir_all_sync(&self) -> Result<bool>;
+
     fn create_parent_dir_sync(&self) -> Result<bool>;
+
     fn empty_dir_sync(&self) -> Result<()>;
+
     fn exists_sync(&self) -> Result<bool>;
+
     fn get_file_size_sync(&self) -> Result<u64>;
+
     fn hard_link_sync(&self, link: impl AsRef<StdPath>) -> Result<()>;
+
     #[cfg(unix)]
     fn is_block_device_sync(&self) -> Result<bool>;
+
     #[cfg(unix)]
     fn is_char_device_sync(&self) -> Result<bool>;
+
     fn is_dir_sync(&self) -> Result<bool>;
+
     #[cfg(unix)]
     fn is_fifo_sync(&self) -> Result<bool>;
+
     fn is_file_sync(&self) -> Result<bool>;
+
     #[cfg(unix)]
     fn is_socket_sync(&self) -> Result<bool>;
+
     fn is_symlink_sync(&self) -> Result<bool>;
+
     fn metadata_sync(&self) -> Result<Metadata>;
+
     fn open_sync(&self) -> Result<File>;
+
     fn open_with_options_sync(&self, options: &OpenOptions) -> Result<File>;
+
     fn read_dir_entries_sync(&self) -> Result<Vec<PathEntry>>;
+
     fn read_dir_names_sync(&self) -> Result<Vec<String>>;
+
     fn read_dir_paths_sync(&self) -> Result<Vec<Path>>;
+
     fn read_dir_sync(&self) -> Result<ReadDir>;
+
     fn read_json_sync<T: DeserializeOwned>(&self) -> Result<T>;
+
     #[cfg(unix)]
     fn read_link_sync(&self) -> Result<Path>;
+
     fn read_sync(&self) -> Result<Vec<u8>>;
+
     fn read_to_string_sync(&self) -> Result<String>;
+
     fn remove_dir_all_sync(&self) -> Result<()>;
+
     fn remove_dir_sync(&self) -> Result<()>;
+
     fn remove_file_sync(&self) -> Result<()>;
+
     fn rename_to_sync(&self, dest: impl AsRef<StdPath>) -> Result<Path>;
+
     fn set_permissions_sync(&self, permissions: Permissions) -> Result<()>;
+
     #[cfg(unix)]
     fn soft_link_sync(&self, link: impl AsRef<StdPath>) -> Result<()>;
+
     fn symlink_metadata_sync(&self) -> Result<Metadata>;
+
     fn touch_sync(&self) -> Result<()>;
+
     fn truncate_sync(&self, len: Option<u64>) -> Result<()>;
+
     fn write_json_sync<T: Serialize>(&self, data: T) -> Result<()>;
+
     fn write_sync(&self, contents: impl AsRef<[u8]>) -> Result<()>;
 }
 
