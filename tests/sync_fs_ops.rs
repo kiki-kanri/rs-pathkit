@@ -14,6 +14,7 @@ use anyhow::{
     anyhow,
 };
 use pathkit::{
+    Path,
     SyncFsOps,
     path,
 };
@@ -26,6 +27,18 @@ use tempfile::{
     NamedTempFile,
     tempdir,
 };
+
+// Test canonicalize_sync
+#[test]
+fn test_canonicalize_sync() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let original = path!(&temp_dir) / ".";
+
+    let canonical: Path = original.canonicalize_sync()?;
+    assert!(canonical.is_absolute());
+    assert_eq!(canonical.as_path(), fs::canonicalize(&original)?);
+    Ok(())
+}
 
 // Test exists_sync
 #[test]

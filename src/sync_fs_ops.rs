@@ -111,6 +111,32 @@ use crate::{
 /// # Ok::<(), std::io::Error>(())
 /// ```
 pub trait SyncFsOps {
+    /// Returns a new absolute path with symlinks resolved by the filesystem.
+    ///
+    /// Uses [`std::fs::canonicalize`], leaving the original value unchanged. Unlike
+    /// [`Path::absolutize`], this operation requires the path to exist. On Windows, the
+    /// result uses the standard library's extended-length path representation.
+    ///
+    /// # Errors
+    ///
+    /// Propagates filesystem errors, including missing path components, permission errors,
+    /// and non-directory components before the end of the path.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use pathkit::{
+    ///     SyncFsOps,
+    ///     path,
+    /// };
+    ///
+    /// let directory = tempfile::tempdir()?;
+    /// let canonical = path!(directory.path()).canonicalize_sync()?;
+    /// assert!(canonical.is_absolute());
+    /// # Ok::<(), std::io::Error>(())
+    /// ```
+    fn canonicalize_sync(&self) -> IoResult<Path>;
+
     #[cfg(unix)]
     fn chmod_sync(&self, mode: u32) -> IoResult<()>;
 
@@ -201,6 +227,10 @@ pub trait SyncFsOps {
 }
 
 impl SyncFsOps for Path {
+    fn canonicalize_sync(&self) -> IoResult<Path> {
+        fs::canonicalize(self).map(Self::new)
+    }
+
     #[cfg(unix)]
     fn chmod_sync(&self, mode: u32) -> IoResult<()> {
         use std::os::unix::fs::PermissionsExt;

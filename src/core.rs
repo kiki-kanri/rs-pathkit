@@ -1,11 +1,10 @@
 //! Owned paths and lexical path transformations.
 //!
-//! Filesystem access is limited to operations that explicitly require it, such as
-//! [`Path::canonicalize`].
+//! Filesystem operations are provided by [`crate::SyncFsOps`] and, with the
+//! `async-fs-ops` feature, `AsyncFsOps`.
 
 use std::{
     ffi::OsStr,
-    fs::canonicalize,
     io::Result as IoResult,
     path::{
         Path as StdPath,
@@ -168,31 +167,6 @@ impl Path {
     #[inline]
     pub fn as_path(&self) -> &StdPath {
         &self.0
-    }
-
-    /// Returns a new absolute path with symlinks resolved by the filesystem.
-    ///
-    /// Uses [`std::fs::canonicalize`], leaving the original value unchanged. Unlike
-    /// [`Self::absolutize`], this operation requires the path to exist. On Windows, the
-    /// result uses the standard library's extended-length path representation.
-    ///
-    /// # Errors
-    ///
-    /// Propagates filesystem errors, including missing path components, permission errors,
-    /// and non-directory components before the end of the path.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use pathkit::path;
-    ///
-    /// let directory = tempfile::tempdir()?;
-    /// let canonical = path!(directory.path()).canonicalize()?;
-    /// assert!(canonical.is_absolute());
-    /// # Ok::<(), std::io::Error>(())
-    /// ```
-    pub fn canonicalize(&self) -> IoResult<Self> {
-        canonicalize(&self.0).map(Self::new)
     }
 
     /// Returns a new path with `path` joined according to standard path semantics.
@@ -631,15 +605,6 @@ mod tests {
         assert!(abs_str.contains("virtual"));
         assert!(abs_str.contains("subdir"));
         assert!(abs_str.contains("file.txt"));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_canonicalize() -> Result<()> {
-        let path = crate::path!(".");
-        let canonical = path.canonicalize()?;
-        assert!(canonical.is_absolute());
 
         Ok(())
     }

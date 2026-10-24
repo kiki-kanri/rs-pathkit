@@ -9,6 +9,8 @@ use anyhow::{
 use pathkit::{
     AsyncFsOps,
     AsyncPathEntry,
+    Path,
+    SyncFsOps,
     path,
 };
 use serde::{
@@ -27,6 +29,19 @@ use tokio::{
         AsyncWriteExt,
     },
 };
+
+// Test canonicalize
+#[tokio::test]
+async fn test_canonicalize() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let original = path!(&temp_dir) / ".";
+
+    let canonical: Path = original.canonicalize().await?;
+    assert!(canonical.is_absolute());
+    assert_eq!(canonical.as_path(), async_fs::canonicalize(&original).await?);
+    assert_eq!(canonical, original.canonicalize_sync()?);
+    Ok(())
+}
 
 // Test exists
 #[tokio::test]

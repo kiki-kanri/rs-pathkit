@@ -72,6 +72,7 @@ if path.exists_sync()? {
 }
 
 let moved = path.rename_to_sync("/tmp/moved.txt")?;
+let canonical = moved.canonicalize_sync()?;
 let config: Config = moved.read_json_sync()?;
 ```
 
@@ -95,6 +96,7 @@ let file = path.open().await?;
 
 path.create_parent_dir_all().await?;
 let moved = path.rename_to("/tmp/moved.txt").await?;
+let canonical = moved.canonicalize().await?;
 ```
 
 Use `open_with_options()` when you need custom `tokio::fs::OpenOptions`.

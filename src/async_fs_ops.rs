@@ -43,6 +43,10 @@ use crate::{
 /// interpreted by the operating system, including relative paths resolved against the
 /// current working directory. The behavior described below applies to that implementation.
 ///
+/// With this trait in scope, its methods take precedence over same-named synchronous
+/// [`std::path::Path`] methods exposed through dereferencing, such as `canonicalize`
+/// and `symlink_metadata`.
+///
 /// The [`Path`] implementation provides these shared behaviors:
 ///
 /// - Metadata and type checks follow symlinks, except [`Self::is_symlink`] and
@@ -126,6 +130,36 @@ use crate::{
 /// ```
 #[async_trait::async_trait]
 pub trait AsyncFsOps {
+    /// Returns a new absolute path with symlinks resolved by the filesystem.
+    ///
+    /// Uses [`tokio::fs::canonicalize`], leaving the original value unchanged. Unlike
+    /// [`Path::absolutize`], this operation requires the path to exist. On Windows, the
+    /// result uses the standard library's extended-length path representation.
+    /// Use [`crate::SyncFsOps::canonicalize_sync`] for synchronous access.
+    ///
+    /// # Errors
+    ///
+    /// Propagates filesystem errors, including missing path components, permission errors,
+    /// and non-directory components before the end of the path.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use pathkit::{
+    ///     AsyncFsOps,
+    ///     path,
+    /// };
+    ///
+    /// #[tokio::main(flavor = "current_thread")]
+    /// async fn main() -> std::io::Result<()> {
+    ///     let directory = tempfile::tempdir()?;
+    ///     let canonical = path!(directory.path()).canonicalize().await?;
+    ///     assert!(canonical.is_absolute());
+    ///     Ok(())
+    /// }
+    /// ```
+    async fn canonicalize(&self) -> IoResult<Path>;
+
     #[cfg(unix)]
     async fn chmod(&self, mode: u32) -> IoResult<()>;
 
@@ -199,8 +233,6 @@ pub trait AsyncFsOps {
     /// Returns metadata for the path itself without following a final symlink.
     ///
     /// Dangling symlinks can be inspected; missing paths return an error.
-    /// With this trait in scope, this method takes precedence over the synchronous
-    /// [`std::path::Path::symlink_metadata`] method exposed through dereferencing.
     /// Use [`crate::SyncFsOps::symlink_metadata_sync`] for synchronous access.
     async fn symlink_metadata(&self) -> IoResult<Metadata>;
 
@@ -213,6 +245,10 @@ pub trait AsyncFsOps {
 
 #[async_trait::async_trait]
 impl AsyncFsOps for Path {
+    async fn canonicalize(&self) -> IoResult<Path> {
+        fs::canonicalize(self).await.map(Self::new)
+    }
+
     #[cfg(unix)]
     async fn chmod(&self, mode: u32) -> IoResult<()> {
         use std::os::unix::fs::PermissionsExt;
