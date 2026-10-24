@@ -22,16 +22,20 @@ use serde_json::{
     from_slice,
     to_vec_pretty,
 };
-use tokio::fs::{
-    self,
-    File,
-    OpenOptions,
-    ReadDir,
+use tokio::{
+    fs::{
+        self,
+        File,
+        OpenOptions,
+        ReadDir,
+    },
+    task::spawn_blocking,
 };
 
 use crate::{
     core::Path,
     entry::r#async::AsyncPathEntry,
+    sync_fs_ops::SyncFsOps,
 };
 
 /// Async filesystem operations for paths.
@@ -297,8 +301,6 @@ impl AsyncFsOps for Path {
     async fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> IoResult<()> {
         use std::os::unix::fs::chown;
 
-        use tokio::task::spawn_blocking;
-
         let path = self.clone();
         Ok(spawn_blocking(move || chown(path, uid, gid)).await??)
     }
@@ -426,10 +428,6 @@ impl AsyncFsOps for Path {
     }
 
     async fn persist_to(&self, dest: impl AsRef<StdPath> + Send) -> IoResult<Path> {
-        use tokio::task::spawn_blocking;
-
-        use crate::SyncFsOps;
-
         let source = self.clone();
         let dest = Self::new(dest);
         spawn_blocking(move || source.persist_to_sync(dest)).await?
@@ -516,10 +514,6 @@ impl AsyncFsOps for Path {
     }
 
     async fn touch(&self) -> IoResult<()> {
-        use tokio::task::spawn_blocking;
-
-        use crate::SyncFsOps;
-
         let path = self.clone();
         spawn_blocking(move || path.touch_sync()).await?
     }
@@ -542,10 +536,6 @@ impl AsyncFsOps for Path {
         contents: impl AsRef<[u8]> + Send,
         prepare: impl for<'a> FnOnce(&'a Path) -> IoResult<()> + Send + 'static,
     ) -> IoResult<()> {
-        use tokio::task::spawn_blocking;
-
-        use crate::SyncFsOps;
-
         let path = self.clone();
         let contents = contents.as_ref().to_vec();
         spawn_blocking(move || path.write_atomic_with_sync(contents, prepare)).await?
