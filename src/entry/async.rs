@@ -4,7 +4,7 @@ use std::{
         FileType,
         Metadata,
     },
-    io,
+    io::Result as IoResult,
 };
 
 use tokio::fs::DirEntry;
@@ -74,7 +74,7 @@ impl AsyncPathEntry {
     ///
     /// Dropping the future discards its result. Metadata I/O already submitted to Tokio's
     /// blocking pool can continue; the entry remains usable for later queries.
-    pub async fn metadata(&self) -> io::Result<Metadata> {
+    pub async fn metadata(&self) -> IoResult<Metadata> {
         self.0.metadata().await
     }
 
@@ -95,7 +95,7 @@ impl AsyncPathEntry {
     ///
     /// Dropping the future discards its result. Metadata I/O already submitted to Tokio's
     /// blocking pool can continue; the entry remains usable for later queries.
-    pub async fn file_type(&self) -> io::Result<FileType> {
+    pub async fn file_type(&self) -> IoResult<FileType> {
         self.0.file_type().await
     }
 

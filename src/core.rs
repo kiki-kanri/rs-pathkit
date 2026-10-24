@@ -6,13 +6,13 @@
 use std::{
     ffi::OsStr,
     fs::canonicalize,
+    io::Result as IoResult,
     path::{
         Path as StdPath,
         PathBuf,
     },
 };
 
-use anyhow::Result;
 use path_absolutize::Absolutize;
 use serde::{
     Deserialize,
@@ -96,9 +96,9 @@ impl Path {
     /// let absolute = path.absolutize()?;
     /// assert!(absolute.is_absolute());
     /// assert_eq!(path, path!("relative/file.txt"));
-    /// # Ok::<(), anyhow::Error>(())
+    /// # Ok::<(), std::io::Error>(())
     /// ```
-    pub fn absolutize(&self) -> Result<Self> {
+    pub fn absolutize(&self) -> IoResult<Self> {
         Ok(Self::new(self.0.absolutize()?))
     }
 
@@ -109,20 +109,19 @@ impl Path {
     /// a relative base does not establish an absolute working directory. The original
     /// path is unchanged.
     ///
-    /// Although the return type is [`anyhow::Result`], this implementation always returns `Ok`.
-    ///
     /// # Examples
     ///
     /// ```rust
     /// use pathkit::path;
     ///
     /// let base = std::env::current_dir()?;
-    /// let resolved = path!("config.json").absolutize_from(&base)?;
+    /// let resolved = path!("config.json").absolutize_from(&base);
     /// assert_eq!(resolved, path!(base.join("config.json")));
-    /// # Ok::<(), anyhow::Error>(())
+    /// # Ok::<(), std::io::Error>(())
     /// ```
-    pub fn absolutize_from(&self, cwd: impl AsRef<StdPath>) -> Result<Self> {
-        Ok(Self::new(self.0.absolutize_from(cwd)))
+    #[must_use]
+    pub fn absolutize_from(&self, cwd: impl AsRef<StdPath>) -> Self {
+        Self::new(self.0.absolutize_from(cwd))
     }
 
     /// Returns a new lexically normalized path relative to a virtual root.
@@ -150,9 +149,9 @@ impl Path {
     /// let root = std::env::current_dir()?;
     /// let resolved = path!("config.json").absolutize_virtually(&root)?;
     /// assert_eq!(resolved, path!(root.join("config.json")));
-    /// # Ok::<(), anyhow::Error>(())
+    /// # Ok::<(), std::io::Error>(())
     /// ```
-    pub fn absolutize_virtually(&self, virtual_root: impl AsRef<StdPath>) -> Result<Self> {
+    pub fn absolutize_virtually(&self, virtual_root: impl AsRef<StdPath>) -> IoResult<Self> {
         Ok(Self::new(self.0.absolutize_virtually(virtual_root)?))
     }
 
@@ -192,7 +191,7 @@ impl Path {
     /// assert!(canonical.is_absolute());
     /// # Ok::<(), std::io::Error>(())
     /// ```
-    pub fn canonicalize(&self) -> Result<Self, std::io::Error> {
+    pub fn canonicalize(&self) -> IoResult<Self> {
         canonicalize(&self.0).map(Self::new)
     }
 
@@ -358,7 +357,10 @@ mod tests {
         path::MAIN_SEPARATOR,
     };
 
-    use anyhow::anyhow;
+    use anyhow::{
+        Result,
+        anyhow,
+    };
 
     use super::*;
 
@@ -606,17 +608,15 @@ mod tests {
     }
 
     #[test]
-    fn test_absolutize_from() -> Result<()> {
+    fn test_absolutize_from() {
         let path = crate::path!("subdir");
-        let absolute = path.absolutize_from(format!("{MAIN_SEPARATOR}base"))?;
+        let absolute = path.absolutize_from(format!("{MAIN_SEPARATOR}base"));
         // Check that the result ends with the joined path (handles platform-specific separators)
         assert!(
             absolute
                 .to_str()
                 .is_some_and(|path| path.ends_with(&format!("{MAIN_SEPARATOR}subdir")))
         );
-
-        Ok(())
     }
 
     #[test]

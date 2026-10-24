@@ -167,7 +167,6 @@ sea-orm = ["dep:sea-orm"]
 # =============================================================================
 
 [dependencies]
-anyhow = "1.0.104"
 async-trait = { version = "0.1.92", optional = true }
 filetime = "0.2.29"
 path-absolutize = "4.0.1"
@@ -296,6 +295,7 @@ tokio = { version = "1.54.1", features = ["fs", "rt", "io-util"], optional = tru
 
 # Test/example/bench-only dependencies.
 [dev-dependencies]
+anyhow = "1.0.104"
 libc = "0.2.191"
 sea-orm = { version = "2.0.4", features = ["mock"] }
 tempfile = "3.27.0"

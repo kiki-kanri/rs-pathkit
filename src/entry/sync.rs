@@ -5,7 +5,7 @@ use std::{
         FileType,
         Metadata,
     },
-    io,
+    io::Result as IoResult,
 };
 
 use crate::Path;
@@ -64,7 +64,7 @@ impl PathEntry {
     ///
     /// Propagates filesystem errors if the underlying query requires I/O and fails, such
     /// as when the entry is removed or permissions prevent reading its metadata.
-    pub fn metadata(&self) -> io::Result<Metadata> {
+    pub fn metadata(&self) -> IoResult<Metadata> {
         self.0.metadata()
     }
 
@@ -76,7 +76,7 @@ impl PathEntry {
     ///
     /// Propagates filesystem errors if the underlying query requires I/O and fails, such
     /// as when the entry is removed or permissions prevent reading its metadata.
-    pub fn file_type(&self) -> io::Result<FileType> {
+    pub fn file_type(&self) -> IoResult<FileType> {
         self.0.file_type()
     }
 

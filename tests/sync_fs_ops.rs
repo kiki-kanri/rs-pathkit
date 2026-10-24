@@ -1,6 +1,7 @@
 use std::{
     fs,
     io::{
+        ErrorKind as IoErrorKind,
         Read,
         Write,
     },
@@ -20,6 +21,7 @@ use serde::{
     Deserialize,
     Serialize,
 };
+use serde_json::Value;
 use tempfile::{
     NamedTempFile,
     tempdir,
@@ -257,6 +259,52 @@ fn test_read_write_json_sync() -> Result<()> {
 
     let loaded: TestData = file_path.read_json_sync()?;
     assert_eq!(loaded, original);
+    Ok(())
+}
+
+#[test]
+fn test_read_json_sync_missing_file_returns_io_error() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let missing = path!(&temp_dir) / "missing.json";
+
+    let error = missing
+        .read_json_sync::<Value>()
+        .err()
+        .ok_or_else(|| anyhow!("expected missing file error"))?;
+
+    assert!(error.is_io());
+    assert_eq!(error.io_error_kind(), Some(IoErrorKind::NotFound));
+    Ok(())
+}
+
+#[test]
+fn test_read_json_sync_invalid_json_returns_syntax_error() -> Result<()> {
+    let temp_file = NamedTempFile::new()?;
+    let file_path = path!(&temp_file);
+    file_path.write_sync(b"not json")?;
+
+    let error = file_path
+        .read_json_sync::<Value>()
+        .err()
+        .ok_or_else(|| anyhow!("expected invalid JSON error"))?;
+
+    assert!(error.is_syntax());
+    assert_eq!(error.io_error_kind(), None);
+    Ok(())
+}
+
+#[test]
+fn test_write_json_sync_missing_parent_returns_io_error() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let file_path = path!(&temp_dir) / "missing" / "data.json";
+
+    let error = file_path
+        .write_json_sync([1, 2, 3])
+        .err()
+        .ok_or_else(|| anyhow!("expected missing parent error"))?;
+
+    assert!(error.is_io());
+    assert_eq!(error.io_error_kind(), Some(IoErrorKind::NotFound));
     Ok(())
 }
 

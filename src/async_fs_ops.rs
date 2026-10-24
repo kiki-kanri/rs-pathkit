@@ -8,15 +8,17 @@ use std::{
         Metadata,
         Permissions,
     },
+    io::Result as IoResult,
     path::Path as StdPath,
 };
 
-use anyhow::Result;
 use serde::{
     Serialize,
     de::DeserializeOwned,
 };
 use serde_json::{
+    Error as JsonError,
+    Result as JsonResult,
     from_slice,
     to_vec_pretty,
 };
@@ -86,9 +88,10 @@ use crate::{
 /// Propagates filesystem errors such as missing paths, permission errors, invalid file
 /// or directory types, and unsupported operations. Directory collection methods also
 /// propagate iteration errors instead of returning partial collections. UTF-8 string
-/// reads fail for invalid UTF-8; JSON reads and writes also propagate deserialization
-/// or serialization errors. Unix ownership changes additionally propagate blocking-task
-/// join errors. Changes made before an error are not rolled back.
+/// reads fail for invalid UTF-8; JSON methods return [`serde_json::Error`], with
+/// filesystem errors wrapped by [`serde_json::Error::io`]. Unix ownership changes
+/// additionally propagate blocking-task join errors. Changes made before an error are
+/// not rolled back.
 ///
 /// # Panics
 ///
@@ -112,7 +115,7 @@ use crate::{
 /// };
 ///
 /// #[tokio::main(flavor = "current_thread")]
-/// async fn main() -> anyhow::Result<()> {
+/// async fn main() -> std::io::Result<()> {
 ///     let directory = tempfile::tempdir()?;
 ///     let file = path!(directory.path()) / "message.txt";
 ///     file.write(b"Hello!").await?;
@@ -124,74 +127,74 @@ use crate::{
 #[async_trait::async_trait]
 pub trait AsyncFsOps {
     #[cfg(unix)]
-    async fn chmod(&self, mode: u32) -> Result<()>;
+    async fn chmod(&self, mode: u32) -> IoResult<()>;
 
     #[cfg(unix)]
-    async fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> Result<()>;
+    async fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> IoResult<()>;
 
-    async fn copy_file(&self, dest: impl AsRef<StdPath> + Send) -> Result<u64>;
+    async fn copy_file(&self, dest: impl AsRef<StdPath> + Send) -> IoResult<u64>;
 
-    async fn create_dir_all(&self) -> Result<()>;
+    async fn create_dir_all(&self) -> IoResult<()>;
 
-    async fn create_dir(&self) -> Result<()>;
+    async fn create_dir(&self) -> IoResult<()>;
 
-    async fn create_parent_dir_all(&self) -> Result<bool>;
+    async fn create_parent_dir_all(&self) -> IoResult<bool>;
 
-    async fn create_parent_dir(&self) -> Result<bool>;
+    async fn create_parent_dir(&self) -> IoResult<bool>;
 
-    async fn empty_dir(&self) -> Result<()>;
+    async fn empty_dir(&self) -> IoResult<()>;
 
-    async fn exists(&self) -> Result<bool>;
+    async fn exists(&self) -> IoResult<bool>;
 
-    async fn get_file_size(&self) -> Result<u64>;
-
-    #[cfg(unix)]
-    async fn is_block_device(&self) -> Result<bool>;
+    async fn get_file_size(&self) -> IoResult<u64>;
 
     #[cfg(unix)]
-    async fn is_char_device(&self) -> Result<bool>;
-
-    async fn is_dir(&self) -> Result<bool>;
+    async fn is_block_device(&self) -> IoResult<bool>;
 
     #[cfg(unix)]
-    async fn is_fifo(&self) -> Result<bool>;
+    async fn is_char_device(&self) -> IoResult<bool>;
 
-    async fn is_file(&self) -> Result<bool>;
+    async fn is_dir(&self) -> IoResult<bool>;
 
     #[cfg(unix)]
-    async fn is_socket(&self) -> Result<bool>;
+    async fn is_fifo(&self) -> IoResult<bool>;
 
-    async fn is_symlink(&self) -> Result<bool>;
+    async fn is_file(&self) -> IoResult<bool>;
 
-    async fn metadata(&self) -> Result<Metadata>;
+    #[cfg(unix)]
+    async fn is_socket(&self) -> IoResult<bool>;
 
-    async fn open(&self) -> Result<File>;
+    async fn is_symlink(&self) -> IoResult<bool>;
 
-    async fn open_with_options(&self, options: &OpenOptions) -> Result<File>;
+    async fn metadata(&self) -> IoResult<Metadata>;
 
-    async fn read_dir(&self) -> Result<ReadDir>;
+    async fn open(&self) -> IoResult<File>;
 
-    async fn read_dir_entries(&self) -> Result<Vec<AsyncPathEntry>>;
+    async fn open_with_options(&self, options: &OpenOptions) -> IoResult<File>;
 
-    async fn read_dir_names(&self) -> Result<Vec<String>>;
+    async fn read_dir(&self) -> IoResult<ReadDir>;
 
-    async fn read_dir_paths(&self) -> Result<Vec<Path>>;
+    async fn read_dir_entries(&self) -> IoResult<Vec<AsyncPathEntry>>;
 
-    async fn read_json<T: DeserializeOwned>(&self) -> Result<T>;
+    async fn read_dir_names(&self) -> IoResult<Vec<String>>;
 
-    async fn read(&self) -> Result<Vec<u8>>;
+    async fn read_dir_paths(&self) -> IoResult<Vec<Path>>;
 
-    async fn read_to_string(&self) -> Result<String>;
+    async fn read_json<T: DeserializeOwned>(&self) -> JsonResult<T>;
 
-    async fn remove_dir_all(&self) -> Result<()>;
+    async fn read(&self) -> IoResult<Vec<u8>>;
 
-    async fn remove_dir(&self) -> Result<()>;
+    async fn read_to_string(&self) -> IoResult<String>;
 
-    async fn remove_file(&self) -> Result<()>;
+    async fn remove_dir_all(&self) -> IoResult<()>;
 
-    async fn rename_to(&self, dest: impl AsRef<StdPath> + Send) -> Result<Path>;
+    async fn remove_dir(&self) -> IoResult<()>;
 
-    async fn set_permissions(&self, permissions: Permissions) -> Result<()>;
+    async fn remove_file(&self) -> IoResult<()>;
+
+    async fn rename_to(&self, dest: impl AsRef<StdPath> + Send) -> IoResult<Path>;
+
+    async fn set_permissions(&self, permissions: Permissions) -> IoResult<()>;
 
     /// Returns metadata for the path itself without following a final symlink.
     ///
@@ -199,45 +202,45 @@ pub trait AsyncFsOps {
     /// With this trait in scope, this method takes precedence over the synchronous
     /// [`std::path::Path::symlink_metadata`] method exposed through dereferencing.
     /// Use [`crate::SyncFsOps::symlink_metadata_sync`] for synchronous access.
-    async fn symlink_metadata(&self) -> Result<Metadata>;
+    async fn symlink_metadata(&self) -> IoResult<Metadata>;
 
-    async fn truncate(&self, len: Option<u64>) -> Result<()>;
+    async fn truncate(&self, len: Option<u64>) -> IoResult<()>;
 
-    async fn write_json<T: Serialize + Send>(&self, data: T) -> Result<()>;
+    async fn write_json<T: Serialize + Send>(&self, data: T) -> JsonResult<()>;
 
-    async fn write(&self, contents: impl AsRef<[u8]> + Send) -> Result<()>;
+    async fn write(&self, contents: impl AsRef<[u8]> + Send) -> IoResult<()>;
 }
 
 #[async_trait::async_trait]
 impl AsyncFsOps for Path {
     #[cfg(unix)]
-    async fn chmod(&self, mode: u32) -> Result<()> {
+    async fn chmod(&self, mode: u32) -> IoResult<()> {
         use std::os::unix::fs::PermissionsExt;
 
-        Ok(fs::set_permissions(self, Permissions::from_mode(mode)).await?)
+        fs::set_permissions(self, Permissions::from_mode(mode)).await
     }
 
     #[cfg(unix)]
-    async fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> Result<()> {
+    async fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> IoResult<()> {
         use tokio::task::spawn_blocking;
 
         let path = self.clone();
         Ok(spawn_blocking(move || std::os::unix::fs::chown(path, uid, gid)).await??)
     }
 
-    async fn copy_file(&self, dest: impl AsRef<StdPath> + Send) -> Result<u64> {
-        Ok(fs::copy(self, dest).await?)
+    async fn copy_file(&self, dest: impl AsRef<StdPath> + Send) -> IoResult<u64> {
+        fs::copy(self, dest).await
     }
 
-    async fn create_dir(&self) -> Result<()> {
-        Ok(fs::create_dir(self).await?)
+    async fn create_dir(&self) -> IoResult<()> {
+        fs::create_dir(self).await
     }
 
-    async fn create_dir_all(&self) -> Result<()> {
-        Ok(fs::create_dir_all(self).await?)
+    async fn create_dir_all(&self) -> IoResult<()> {
+        fs::create_dir_all(self).await
     }
 
-    async fn create_parent_dir_all(&self) -> Result<bool> {
+    async fn create_parent_dir_all(&self) -> IoResult<bool> {
         if let Some(parent) = self.parent() {
             parent.create_dir_all().await?;
             return Ok(true);
@@ -246,7 +249,7 @@ impl AsyncFsOps for Path {
         Ok(false)
     }
 
-    async fn create_parent_dir(&self) -> Result<bool> {
+    async fn create_parent_dir(&self) -> IoResult<bool> {
         if let Some(parent) = self.parent() {
             parent.create_dir().await?;
             return Ok(true);
@@ -255,7 +258,7 @@ impl AsyncFsOps for Path {
         Ok(false)
     }
 
-    async fn empty_dir(&self) -> Result<()> {
+    async fn empty_dir(&self) -> IoResult<()> {
         #[cfg(windows)]
         use std::os::windows::fs::FileTypeExt;
 
@@ -283,75 +286,75 @@ impl AsyncFsOps for Path {
         Ok(())
     }
 
-    async fn exists(&self) -> Result<bool> {
-        Ok(fs::try_exists(self).await?)
+    async fn exists(&self) -> IoResult<bool> {
+        fs::try_exists(self).await
     }
 
-    async fn get_file_size(&self) -> Result<u64> {
+    async fn get_file_size(&self) -> IoResult<u64> {
         Ok(self.metadata().await?.len())
     }
 
     #[cfg(unix)]
-    async fn is_block_device(&self) -> Result<bool> {
+    async fn is_block_device(&self) -> IoResult<bool> {
         use std::os::unix::fs::FileTypeExt;
 
         Ok(self.metadata().await?.file_type().is_block_device())
     }
 
     #[cfg(unix)]
-    async fn is_char_device(&self) -> Result<bool> {
+    async fn is_char_device(&self) -> IoResult<bool> {
         use std::os::unix::fs::FileTypeExt;
 
         Ok(self.metadata().await?.file_type().is_char_device())
     }
 
-    async fn is_dir(&self) -> Result<bool> {
+    async fn is_dir(&self) -> IoResult<bool> {
         Ok(self.metadata().await?.is_dir())
     }
 
     #[cfg(unix)]
-    async fn is_fifo(&self) -> Result<bool> {
+    async fn is_fifo(&self) -> IoResult<bool> {
         use std::os::unix::fs::FileTypeExt;
 
         Ok(self.metadata().await?.file_type().is_fifo())
     }
 
-    async fn is_file(&self) -> Result<bool> {
+    async fn is_file(&self) -> IoResult<bool> {
         Ok(self.metadata().await?.is_file())
     }
 
     #[cfg(unix)]
-    async fn is_socket(&self) -> Result<bool> {
+    async fn is_socket(&self) -> IoResult<bool> {
         use std::os::unix::fs::FileTypeExt;
 
         Ok(self.metadata().await?.file_type().is_socket())
     }
 
-    async fn is_symlink(&self) -> Result<bool> {
+    async fn is_symlink(&self) -> IoResult<bool> {
         Ok(self.symlink_metadata().await?.file_type().is_symlink())
     }
 
-    async fn metadata(&self) -> Result<Metadata> {
-        Ok(fs::metadata(self).await?)
+    async fn metadata(&self) -> IoResult<Metadata> {
+        fs::metadata(self).await
     }
 
-    async fn open(&self) -> Result<File> {
-        Ok(File::open(self).await?)
+    async fn open(&self) -> IoResult<File> {
+        File::open(self).await
     }
 
-    async fn open_with_options(&self, options: &OpenOptions) -> Result<File> {
-        Ok(options.open(self).await?)
+    async fn open_with_options(&self, options: &OpenOptions) -> IoResult<File> {
+        options.open(self).await
     }
 
-    async fn read(&self) -> Result<Vec<u8>> {
-        Ok(fs::read(self).await?)
+    async fn read(&self) -> IoResult<Vec<u8>> {
+        fs::read(self).await
     }
 
-    async fn read_dir(&self) -> Result<ReadDir> {
-        Ok(fs::read_dir(self).await?)
+    async fn read_dir(&self) -> IoResult<ReadDir> {
+        fs::read_dir(self).await
     }
 
-    async fn read_dir_entries(&self) -> Result<Vec<AsyncPathEntry>> {
+    async fn read_dir_entries(&self) -> IoResult<Vec<AsyncPathEntry>> {
         let mut entries = Vec::new();
         let mut read_dir = fs::read_dir(self).await?;
         while let Some(entry) = read_dir.next_entry().await? {
@@ -361,7 +364,7 @@ impl AsyncFsOps for Path {
         Ok(entries)
     }
 
-    async fn read_dir_names(&self) -> Result<Vec<String>> {
+    async fn read_dir_names(&self) -> IoResult<Vec<String>> {
         let mut names = Vec::new();
         let mut read_dir = fs::read_dir(self).await?;
         while let Some(entry) = read_dir.next_entry().await? {
@@ -371,7 +374,7 @@ impl AsyncFsOps for Path {
         Ok(names)
     }
 
-    async fn read_dir_paths(&self) -> Result<Vec<Path>> {
+    async fn read_dir_paths(&self) -> IoResult<Vec<Path>> {
         let mut paths = Vec::new();
         let mut read_dir = fs::read_dir(self).await?;
         while let Some(entry) = read_dir.next_entry().await? {
@@ -381,53 +384,53 @@ impl AsyncFsOps for Path {
         Ok(paths)
     }
 
-    async fn read_json<T: DeserializeOwned>(&self) -> Result<T> {
-        Ok(from_slice::<T>(&self.read().await?)?)
+    async fn read_json<T: DeserializeOwned>(&self) -> JsonResult<T> {
+        from_slice(&self.read().await.map_err(JsonError::io)?)
     }
 
-    async fn read_to_string(&self) -> Result<String> {
-        Ok(fs::read_to_string(self).await?)
+    async fn read_to_string(&self) -> IoResult<String> {
+        fs::read_to_string(self).await
     }
 
-    async fn remove_dir(&self) -> Result<()> {
-        Ok(fs::remove_dir(self).await?)
+    async fn remove_dir(&self) -> IoResult<()> {
+        fs::remove_dir(self).await
     }
 
-    async fn remove_file(&self) -> Result<()> {
-        Ok(fs::remove_file(self).await?)
+    async fn remove_file(&self) -> IoResult<()> {
+        fs::remove_file(self).await
     }
 
-    async fn remove_dir_all(&self) -> Result<()> {
-        Ok(fs::remove_dir_all(self).await?)
+    async fn remove_dir_all(&self) -> IoResult<()> {
+        fs::remove_dir_all(self).await
     }
 
-    async fn rename_to(&self, dest: impl AsRef<StdPath> + Send) -> Result<Path> {
+    async fn rename_to(&self, dest: impl AsRef<StdPath> + Send) -> IoResult<Path> {
         fs::rename(self, dest.as_ref()).await?;
         Ok(crate::path!(dest))
     }
 
-    async fn set_permissions(&self, permissions: Permissions) -> Result<()> {
-        Ok(fs::set_permissions(self, permissions).await?)
+    async fn set_permissions(&self, permissions: Permissions) -> IoResult<()> {
+        fs::set_permissions(self, permissions).await
     }
 
-    async fn symlink_metadata(&self) -> Result<Metadata> {
-        Ok(fs::symlink_metadata(self).await?)
+    async fn symlink_metadata(&self) -> IoResult<Metadata> {
+        fs::symlink_metadata(self).await
     }
 
-    async fn truncate(&self, len: Option<u64>) -> Result<()> {
-        Ok(OpenOptions::new()
+    async fn truncate(&self, len: Option<u64>) -> IoResult<()> {
+        OpenOptions::new()
             .write(true)
             .open(self)
             .await?
             .set_len(len.unwrap_or(0))
-            .await?)
+            .await
     }
 
-    async fn write_json<T: Serialize + Send>(&self, data: T) -> Result<()> {
-        self.write(to_vec_pretty(&data)?).await
+    async fn write_json<T: Serialize + Send>(&self, data: T) -> JsonResult<()> {
+        self.write(to_vec_pretty(&data)?).await.map_err(JsonError::io)
     }
 
-    async fn write(&self, contents: impl AsRef<[u8]> + Send) -> Result<()> {
-        Ok(fs::write(self, contents).await?)
+    async fn write(&self, contents: impl AsRef<[u8]> + Send) -> IoResult<()> {
+        fs::write(self, contents).await
     }
 }

@@ -59,7 +59,7 @@
 //! file.write_sync(b"Hello!")?;
 //! assert_eq!(file.read_to_string_sync()?, "Hello!");
 //! assert_eq!(file.get_file_size_sync()?, 6);
-//! # Ok::<(), anyhow::Error>(())
+//! # Ok::<(), std::io::Error>(())
 //! ```
 //!
 //! # See also

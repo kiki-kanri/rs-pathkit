@@ -1,9 +1,6 @@
 #![cfg(feature = "async-fs-ops")]
 
-use std::io::{
-    Error as IoError,
-    ErrorKind as IoErrorKind,
-};
+use std::io::ErrorKind as IoErrorKind;
 
 use anyhow::{
     Result,
@@ -18,6 +15,7 @@ use serde::{
     Deserialize,
     Serialize,
 };
+use serde_json::Value;
 use tempfile::{
     NamedTempFile,
     tempdir,
@@ -135,11 +133,7 @@ async fn test_symlink_metadata_for_missing_path() -> Result<()> {
         .err()
         .ok_or_else(|| anyhow!("expected missing path error"))?;
 
-    assert_eq!(
-        error.downcast_ref::<IoError>().map(IoError::kind),
-        Some(IoErrorKind::NotFound)
-    );
-
+    assert_eq!(error.kind(), IoErrorKind::NotFound);
     Ok(())
 }
 
@@ -307,6 +301,55 @@ async fn test_read_write_json() -> Result<()> {
 
     let loaded: TestData = file_path.read_json().await?;
     assert_eq!(loaded, original);
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_read_json_missing_file_returns_io_error() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let missing = path!(&temp_dir) / "missing.json";
+
+    let error = missing
+        .read_json::<Value>()
+        .await
+        .err()
+        .ok_or_else(|| anyhow!("expected missing file error"))?;
+
+    assert!(error.is_io());
+    assert_eq!(error.io_error_kind(), Some(IoErrorKind::NotFound));
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_read_json_invalid_json_returns_syntax_error() -> Result<()> {
+    let temp_file = NamedTempFile::new()?;
+    let file_path = path!(&temp_file);
+    file_path.write(b"not json").await?;
+
+    let error = file_path
+        .read_json::<Value>()
+        .await
+        .err()
+        .ok_or_else(|| anyhow!("expected invalid JSON error"))?;
+
+    assert!(error.is_syntax());
+    assert_eq!(error.io_error_kind(), None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_write_json_missing_parent_returns_io_error() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let file_path = path!(&temp_dir) / "missing" / "data.json";
+
+    let error = file_path
+        .write_json([1, 2, 3])
+        .await
+        .err()
+        .ok_or_else(|| anyhow!("expected missing parent error"))?;
+
+    assert!(error.is_io());
+    assert_eq!(error.io_error_kind(), Some(IoErrorKind::NotFound));
     Ok(())
 }
 
