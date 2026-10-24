@@ -314,6 +314,25 @@ fn test_write_atomic_with_sync_removes_temporary_file_on_failure() -> Result<()>
     Ok(())
 }
 
+#[test]
+fn test_write_atomic_with_sync_removes_temporary_file_on_panic() -> Result<()> {
+    use std::panic::{
+        AssertUnwindSafe,
+        catch_unwind,
+    };
+
+    let temp_dir = tempdir()?;
+    let path = path!(&temp_dir) / "config.json";
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        path.write_atomic_with_sync(b"new", |_| panic!("prepare panicked"))
+    }));
+
+    assert!(result.is_err());
+    assert_eq!(path!(&temp_dir).read_dir_names_sync()?.len(), 0);
+    Ok(())
+}
+
 #[cfg(unix)]
 #[test]
 fn test_write_atomic_sync_accepts_maximum_length_file_name() -> Result<()> {

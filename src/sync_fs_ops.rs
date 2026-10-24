@@ -469,7 +469,7 @@ impl SyncFsOps for Path {
 
     fn rename_to_sync(&self, dest: impl AsRef<StdPath>) -> IoResult<Path> {
         fs::rename(self, &dest)?;
-        Ok(crate::path!(dest))
+        Ok(Self::new(dest))
     }
 
     fn set_permissions_sync(&self, permissions: Permissions) -> IoResult<()> {
@@ -509,12 +509,10 @@ impl SyncFsOps for Path {
         prepare: impl FnOnce(&Path) -> IoResult<()>,
     ) -> IoResult<()> {
         let (temp_path, file) = create_temp_sibling(self)?;
-        let result = write_and_replace(file, &temp_path, self, contents.as_ref(), prepare);
-        if result.is_err() {
-            let _ = fs::remove_file(&temp_path);
-        }
-
-        result
+        let mut cleanup = RemoveOnDrop(Some(&temp_path));
+        write_and_replace(file, &temp_path, self, contents.as_ref(), prepare)?;
+        cleanup.0 = None;
+        Ok(())
     }
 
     fn write_json_sync<T: Serialize>(&self, data: T) -> JsonResult<()> {
@@ -529,6 +527,19 @@ impl SyncFsOps for Path {
 // Constants/Statics
 const TEMP_FILE_ATTEMPTS: u32 = 64;
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+// Structs
+
+/// Removes the temporary file on errors and unwinding unless disarmed.
+struct RemoveOnDrop<'a>(Option<&'a Path>);
+
+impl Drop for RemoveOnDrop<'_> {
+    fn drop(&mut self) {
+        if let Some(path) = self.0 {
+            let _ = fs::remove_file(path);
+        }
+    }
+}
 
 // Functions
 fn create_temp_sibling(path: &Path) -> IoResult<(Path, File)> {

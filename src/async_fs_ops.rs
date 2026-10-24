@@ -302,7 +302,7 @@ impl AsyncFsOps for Path {
         use std::os::unix::fs::chown;
 
         let path = self.clone();
-        Ok(spawn_blocking(move || chown(path, uid, gid)).await??)
+        spawn_blocking(move || chown(path, uid, gid)).await?
     }
 
     async fn copy_file(&self, dest: impl AsRef<StdPath> + Send) -> IoResult<u64> {
@@ -497,7 +497,7 @@ impl AsyncFsOps for Path {
 
     async fn rename_to(&self, dest: impl AsRef<StdPath> + Send) -> IoResult<Path> {
         fs::rename(self, dest.as_ref()).await?;
-        Ok(crate::path!(dest))
+        Ok(Self::new(dest))
     }
 
     async fn set_permissions(&self, permissions: Permissions) -> IoResult<()> {
