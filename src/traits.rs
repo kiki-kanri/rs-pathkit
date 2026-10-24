@@ -1,6 +1,9 @@
 use std::{
     borrow::Borrow,
-    ffi::OsStr,
+    ffi::{
+        OsStr,
+        OsString,
+    },
     fmt::{
         Display,
         Formatter,
@@ -83,6 +86,46 @@ impl From<String> for Path {
     }
 }
 
+/// An owned native-string-to-path conversion that consumes the string without copying
+/// or accessing the filesystem.
+///
+/// # Examples
+///
+/// ```rust
+/// use std::ffi::OsString;
+///
+/// use pathkit::Path;
+///
+/// let path = Path::from(OsString::from("config.json"));
+/// assert_eq!(path.as_path(), std::path::Path::new("config.json"));
+/// ```
+impl From<OsString> for Path {
+    #[inline]
+    fn from(path: OsString) -> Self {
+        Self(PathBuf::from(path))
+    }
+}
+
+/// An owned path conversion that takes the [`std::path::PathBuf`] buffer without copying
+/// or accessing the filesystem.
+///
+/// # Examples
+///
+/// ```rust
+/// use std::path::PathBuf;
+///
+/// use pathkit::Path;
+///
+/// let path = Path::from(PathBuf::from("config.json"));
+/// assert_eq!(path.as_path(), std::path::Path::new("config.json"));
+/// ```
+impl From<PathBuf> for Path {
+    #[inline]
+    fn from(path: PathBuf) -> Self {
+        Self(path)
+    }
+}
+
 /// A borrowed [`std::path::PathBuf`] view without copying or converting native path data.
 ///
 /// The view borrows the original path. It does not consume the path or allow mutation
@@ -124,7 +167,10 @@ impl AsRef<Path> for Path {
 mod tests {
     use std::{
         borrow::Borrow,
-        ffi::OsStr,
+        ffi::{
+            OsStr,
+            OsString,
+        },
         path::{
             Path as StdPath,
             PathBuf,
@@ -164,6 +210,8 @@ mod tests {
         assert_eq!(Path::from(std_path).as_path(), std_path);
         assert_eq!(Path::from("/test/path").as_path(), std_path);
         assert_eq!(Path::from(String::from("/test/path")).as_path(), std_path);
+        assert_eq!(Path::from(OsString::from("/test/path")).as_path(), std_path);
+        assert_eq!(Path::from(expected.clone()).as_path(), std_path);
         assert_eq!(PathBuf::from(crate::path!("/test/path")), expected);
     }
 
@@ -178,16 +226,13 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn test_non_utf8_path_preserves_native_data() {
-        use std::{
-            ffi::OsString,
-            os::unix::ffi::{
-                OsStrExt,
-                OsStringExt,
-            },
+        use std::os::unix::ffi::{
+            OsStrExt,
+            OsStringExt,
         };
 
         let bytes = b"/test/\xff".to_vec();
-        let path = crate::path!(OsString::from_vec(bytes.clone()));
+        let path = Path::from(OsString::from_vec(bytes.clone()));
         let os_str: &OsStr = path.as_ref();
 
         assert_eq!(path.to_str(), None);

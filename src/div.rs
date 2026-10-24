@@ -15,8 +15,9 @@ impl Div<&Path> for Path {
     type Output = Path;
 
     #[inline]
-    fn div(self, rhs: &Path) -> Self::Output {
-        self.join(rhs)
+    fn div(mut self, rhs: &Path) -> Self::Output {
+        self.0.push(rhs);
+        self
     }
 }
 
@@ -33,8 +34,9 @@ impl Div<Path> for Path {
     type Output = Path;
 
     #[inline]
-    fn div(self, rhs: Path) -> Self::Output {
-        self.join(&rhs)
+    fn div(mut self, rhs: Path) -> Self::Output {
+        self.0.push(&rhs);
+        self
     }
 }
 
@@ -79,40 +81,46 @@ impl Div<String> for &Path {
 
 /// A path-joining operator with a string operand and an owned path result.
 ///
-/// Consumes the base and borrows the string. Uses [`Path::join`], including its rooted-path and
-/// absolute-path replacement rules; this does not rename or otherwise modify the filesystem.
+/// Consumes the base and borrows the string, reusing the base buffer. Follows [`Path::join`],
+/// including its rooted-path and absolute-path replacement rules; this does not rename or
+/// otherwise modify the filesystem.
 impl Div<&str> for Path {
     type Output = Path;
 
     #[inline]
-    fn div(self, rhs: &str) -> Self::Output {
-        self.join(rhs)
+    fn div(mut self, rhs: &str) -> Self::Output {
+        self.0.push(rhs);
+        self
     }
 }
 
 /// A path-joining operator with a string operand and an owned path result.
 ///
-/// Consumes the base and borrows the string. Uses [`Path::join`], including its rooted-path and
-/// absolute-path replacement rules; this does not rename or otherwise modify the filesystem.
+/// Consumes the base and borrows the string, reusing the base buffer. Follows [`Path::join`],
+/// including its rooted-path and absolute-path replacement rules; this does not rename or
+/// otherwise modify the filesystem.
 impl Div<&String> for Path {
     type Output = Path;
 
     #[inline]
-    fn div(self, rhs: &String) -> Self::Output {
-        self.join(rhs.as_str())
+    fn div(mut self, rhs: &String) -> Self::Output {
+        self.0.push(rhs.as_str());
+        self
     }
 }
 
 /// A path-joining operator with a string operand and an owned path result.
 ///
-/// Consumes both operands. Uses [`Path::join`], including its rooted-path and
-/// absolute-path replacement rules; this does not rename or otherwise modify the filesystem.
+/// Consumes both operands, reusing the base buffer. Follows [`Path::join`], including its
+/// rooted-path and absolute-path replacement rules; this does not rename or otherwise modify
+/// the filesystem.
 impl Div<String> for Path {
     type Output = Path;
 
     #[inline]
-    fn div(self, rhs: String) -> Self::Output {
-        self.join(rhs.as_str())
+    fn div(mut self, rhs: String) -> Self::Output {
+        self.0.push(rhs.as_str());
+        self
     }
 }
 

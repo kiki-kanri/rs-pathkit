@@ -228,7 +228,7 @@ pub trait SyncFsOps {
 
 impl SyncFsOps for Path {
     fn canonicalize_sync(&self) -> IoResult<Path> {
-        fs::canonicalize(self).map(Self::new)
+        fs::canonicalize(self).map(Self::from)
     }
 
     #[cfg(unix)]
@@ -375,7 +375,7 @@ impl SyncFsOps for Path {
     fn read_dir_paths_sync(&self) -> IoResult<Vec<Path>> {
         let mut paths = Vec::new();
         for entry in fs::read_dir(self)? {
-            paths.push(Self::new(entry?.path()));
+            paths.push(Self::from(entry?.path()));
         }
 
         Ok(paths)
@@ -391,7 +391,7 @@ impl SyncFsOps for Path {
 
     #[cfg(unix)]
     fn read_link_sync(&self) -> IoResult<Path> {
-        Ok(Self::new(fs::read_link(self)?))
+        fs::read_link(self).map(Self::from)
     }
 
     fn read_sync(&self) -> IoResult<Vec<u8>> {

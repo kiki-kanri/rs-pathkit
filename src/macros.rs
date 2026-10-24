@@ -38,7 +38,7 @@
 #[macro_export]
 macro_rules! path {
     ($fmt:literal $(, $($arg:tt)*)?) => {
-        $crate::Path::new(format!($fmt $(, $($arg)*)?))
+        $crate::Path::from(format!($fmt $(, $($arg)*)?))
     };
     ($path:expr $(,)?) => {
         $crate::Path::new($path)

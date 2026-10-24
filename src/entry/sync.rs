@@ -45,7 +45,7 @@ impl PathEntry {
     /// relative entry path. Does not resolve symlinks or check that the entry still exists.
     #[inline]
     pub fn path(&self) -> Path {
-        crate::path!(self.0.path())
+        Path::from(self.0.path())
     }
 
     /// Returns an owned copy of the entry's file name without its directory path.

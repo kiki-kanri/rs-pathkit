@@ -246,7 +246,7 @@ pub trait AsyncFsOps {
 #[async_trait::async_trait]
 impl AsyncFsOps for Path {
     async fn canonicalize(&self) -> IoResult<Path> {
-        fs::canonicalize(self).await.map(Self::new)
+        fs::canonicalize(self).await.map(Self::from)
     }
 
     #[cfg(unix)]
@@ -414,7 +414,7 @@ impl AsyncFsOps for Path {
         let mut paths = Vec::new();
         let mut read_dir = fs::read_dir(self).await?;
         while let Some(entry) = read_dir.next_entry().await? {
-            paths.push(Self::new(entry.path()));
+            paths.push(Self::from(entry.path()));
         }
 
         Ok(paths)

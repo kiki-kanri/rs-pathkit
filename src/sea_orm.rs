@@ -80,7 +80,7 @@ impl Nullable for Path {
 impl TryGetable for Path {
     fn try_get_by<I: ColIdx>(result: &QueryResult, idx: I) -> Result<Self, TryGetError> {
         let string = <String as TryGetable>::try_get_by(result, idx)?;
-        Ok(Self::new(string))
+        Ok(Self::from(string))
     }
 }
 
@@ -91,7 +91,7 @@ impl TryGetable for Path {
 impl ValueType for Path {
     fn try_from(v: Value) -> Result<Self, ValueTypeErr> {
         if let Value::String(Some(s)) = v {
-            Ok(Self::new(s.as_str()))
+            Ok(Self::from(s))
         } else {
             Err(ValueTypeErr)
         }

@@ -63,6 +63,8 @@ impl Path {
     /// Accepts any value implementing `AsRef<std::path::Path>`, including native OS strings,
     /// standard paths, and [`Path`] values. The input is borrowed to copy its path data;
     /// passing an owned value consumes that argument but does not reuse its buffer.
+    /// [`Path::from`] takes ownership of a [`String`], [`std::ffi::OsString`], or
+    /// [`std::path::PathBuf`] buffer without copying.
     ///
     /// # Examples
     ///
@@ -98,7 +100,7 @@ impl Path {
     /// # Ok::<(), std::io::Error>(())
     /// ```
     pub fn absolutize(&self) -> IoResult<Self> {
-        Ok(Self::new(self.0.absolutize()?))
+        Ok(Self(self.0.absolutize()?.into_owned()))
     }
 
     /// Returns a new lexically normalized path using `cwd` as the base for relative paths.
@@ -120,7 +122,7 @@ impl Path {
     /// ```
     #[must_use]
     pub fn absolutize_from(&self, cwd: impl AsRef<StdPath>) -> Self {
-        Self::new(self.0.absolutize_from(cwd))
+        Self(self.0.absolutize_from(cwd).into_owned())
     }
 
     /// Returns a new lexically normalized path relative to a virtual root.
@@ -151,7 +153,7 @@ impl Path {
     /// # Ok::<(), std::io::Error>(())
     /// ```
     pub fn absolutize_virtually(&self, virtual_root: impl AsRef<StdPath>) -> IoResult<Self> {
-        Ok(Self::new(self.0.absolutize_virtually(virtual_root)?))
+        Ok(Self(self.0.absolutize_virtually(virtual_root)?.into_owned()))
     }
 
     /// Returns a borrowed view of the underlying standard path without copying its data.
@@ -196,7 +198,7 @@ impl Path {
     #[inline]
     #[must_use]
     pub fn join(&self, path: impl AsRef<StdPath>) -> Self {
-        Self::new(self.0.join(path))
+        Self(self.0.join(path))
     }
 
     /// Returns an owned parent path, or `None` if no parent exists.
@@ -265,7 +267,7 @@ impl Path {
     #[inline]
     #[must_use]
     pub fn with_added_extension<S: AsRef<OsStr>>(&self, extension: S) -> Self {
-        Self::new(self.0.with_added_extension(extension))
+        Self(self.0.with_added_extension(extension))
     }
 
     /// Returns a new path with its final extension replaced by `extension`.
@@ -292,7 +294,7 @@ impl Path {
     #[inline]
     #[must_use]
     pub fn with_extension<S: AsRef<OsStr>>(&self, extension: S) -> Self {
-        Self::new(self.0.with_extension(extension))
+        Self(self.0.with_extension(extension))
     }
 
     /// Returns a new path with its file name replaced by `file_name`.
@@ -317,7 +319,7 @@ impl Path {
     #[inline]
     #[must_use]
     pub fn with_file_name<S: AsRef<OsStr>>(&self, file_name: S) -> Self {
-        Self::new(self.0.with_file_name(file_name))
+        Self(self.0.with_file_name(file_name))
     }
 }
 
