@@ -258,10 +258,12 @@ impl AsyncFsOps for Path {
 
     #[cfg(unix)]
     async fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> IoResult<()> {
+        use std::os::unix::fs::chown;
+
         use tokio::task::spawn_blocking;
 
         let path = self.clone();
-        Ok(spawn_blocking(move || std::os::unix::fs::chown(path, uid, gid)).await??)
+        Ok(spawn_blocking(move || chown(path, uid, gid)).await??)
     }
 
     async fn copy_file(&self, dest: impl AsRef<StdPath> + Send) -> IoResult<u64> {
