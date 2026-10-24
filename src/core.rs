@@ -32,10 +32,8 @@ use serde::{
 ///
 /// Serde serialization and deserialization use the underlying [`std::path::PathBuf`]
 /// representation; serialization fails if the native path is not valid UTF-8.
-/// Converting into [`String`] or formatting with [`std::fmt::Display`] replaces invalid
-/// Unicode with the replacement character. In contrast, borrowing
-/// through `AsRef<str>` panics if the path is not valid UTF-8; use
-/// [`std::path::Path::to_str`] to check or [`Self::as_path`] to preserve native encoding.
+/// Formatting with [`std::fmt::Display`] replaces invalid Unicode with the replacement
+/// character.
 ///
 /// # Examples
 ///
@@ -644,25 +642,5 @@ mod tests {
         assert!(canonical.is_absolute());
 
         Ok(())
-    }
-
-    #[test]
-    fn test_display() {
-        let path = crate::path!("/test/path");
-        assert_eq!(format!("{path}"), "/test/path");
-    }
-
-    #[test]
-    fn test_from_pathbuf() {
-        let pathbuf = PathBuf::from("/test/path");
-        let path = crate::path!(pathbuf);
-        assert_eq!(path.to_path_buf(), PathBuf::from("/test/path"));
-    }
-
-    #[test]
-    fn test_from_std_path() {
-        let std_path = StdPath::new("/test/path");
-        let path = Path::from(std_path);
-        assert_eq!(path.to_str(), Some("/test/path"));
     }
 }

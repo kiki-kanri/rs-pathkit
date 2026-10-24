@@ -83,54 +83,6 @@ impl From<String> for Path {
     }
 }
 
-/// A consuming conversion into an owned, lossy Unicode path string.
-///
-/// Replaces invalid Unicode with the replacement character (`U+FFFD`). Use
-/// `std::path::PathBuf::from(path)` instead to transfer the native path data losslessly.
-///
-/// # Examples
-///
-/// ```rust
-/// use pathkit::path;
-///
-/// let text = String::from(path!("config.json"));
-/// assert_eq!(text, "config.json");
-/// ```
-impl From<Path> for String {
-    #[inline]
-    fn from(path: Path) -> Self {
-        path.to_string_lossy().into_owned()
-    }
-}
-
-/// A borrowed UTF-8 string view of a path without copying its data.
-///
-/// The view borrows the original path. Unlike conversion into [`String`], this does
-/// not replace invalid Unicode; [`std::path::Path::to_str`] provides a fallible alternative.
-///
-/// # Panics
-///
-/// Panics if the path is not valid UTF-8.
-///
-/// # Examples
-///
-/// ```rust
-/// use pathkit::path;
-///
-/// let path = path!("config.json");
-/// let text: &str = path.as_ref();
-/// assert_eq!(text, "config.json");
-/// ```
-impl AsRef<str> for Path {
-    #[inline]
-    fn as_ref(&self) -> &str {
-        match self.to_str() {
-            Some(path) => path,
-            None => panic!("Path contains non-UTF-8 data and cannot be borrowed as str"),
-        }
-    }
-}
-
 /// A borrowed [`std::path::PathBuf`] view without copying or converting native path data.
 ///
 /// The view borrows the original path. It does not consume the path or allow mutation
@@ -207,44 +159,41 @@ mod tests {
     #[test]
     fn test_path_conversions() {
         let std_path = StdPath::new("/test/path");
-        let from_std_path: Path = Path::from(std_path);
-        assert_eq!(from_std_path.to_str(), Some("/test/path"));
+        let expected = PathBuf::from("/test/path");
 
-        let from_pathbuf = crate::path!(PathBuf::from("/test/path"));
-        assert_eq!(from_pathbuf.to_path_buf(), PathBuf::from("/test/path"));
-
-        let path = crate::path!("/test/path");
-        let pathbuf: PathBuf = PathBuf::from(path.clone());
-        let string: String = String::from(path);
-
-        assert_eq!(pathbuf, PathBuf::from("/test/path"));
-        assert_eq!(string, "/test/path");
-        assert_eq!(Path::from("/test/path").to_str(), Some("/test/path"));
-        assert_eq!(Path::from(String::from("/test/path")).to_str(), Some("/test/path"));
+        assert_eq!(Path::from(std_path).as_path(), std_path);
+        assert_eq!(Path::from("/test/path").as_path(), std_path);
+        assert_eq!(Path::from(String::from("/test/path")).as_path(), std_path);
+        assert_eq!(PathBuf::from(crate::path!("/test/path")), expected);
     }
 
     #[test]
     fn test_string_views() {
         let path = crate::path!("/test/文件.txt");
-        let ascii = crate::path!("/test/path");
-        let borrowed_str: &str = ascii.as_ref();
 
-        assert_eq!(path.to_string_lossy(), "/test/文件.txt");
         assert_eq!(path.to_str(), Some("/test/文件.txt"));
-        assert_eq!(borrowed_str, "/test/path");
+        assert_eq!(path.to_string_lossy(), "/test/文件.txt");
     }
 
     #[cfg(unix)]
     #[test]
-    #[should_panic(expected = "Path contains non-UTF-8 data and cannot be borrowed as str")]
-    fn test_as_ref_str_panics_on_non_utf8_path() {
+    fn test_non_utf8_path_preserves_native_data() {
         use std::{
             ffi::OsString,
-            os::unix::ffi::OsStringExt,
+            os::unix::ffi::{
+                OsStrExt,
+                OsStringExt,
+            },
         };
 
-        let path = crate::path!(OsString::from_vec(vec![0xff]));
-        let _: &str = path.as_ref();
+        let bytes = b"/test/\xff".to_vec();
+        let path = crate::path!(OsString::from_vec(bytes.clone()));
+        let os_str: &OsStr = path.as_ref();
+
+        assert_eq!(path.to_str(), None);
+        assert_eq!(path.to_string(), "/test/\u{fffd}");
+        assert_eq!(os_str.as_bytes(), bytes.as_slice());
+        assert_eq!(PathBuf::from(path).into_os_string().into_vec(), bytes);
     }
 
     #[test]
