@@ -62,20 +62,20 @@ impl Div<&String> for &Path {
 
     #[inline]
     fn div(self, rhs: &String) -> Self::Output {
-        self.join(rhs.as_str())
+        self.join(rhs)
     }
 }
 
 /// A path-joining operator with a string operand and an owned path result.
 ///
-/// Borrows the base and consumes the string without changing the base path. Uses [`Path::join`], including
-/// its rooted-path and absolute-path replacement rules.
+/// Borrows the base and consumes the string without changing the base path. Uses
+/// [`Path::join`], including its rooted-path and absolute-path replacement rules.
 impl Div<String> for &Path {
     type Output = Path;
 
     #[inline]
     fn div(self, rhs: String) -> Self::Output {
-        self.join(rhs.as_str())
+        self.join(rhs)
     }
 }
 
@@ -104,7 +104,7 @@ impl Div<&String> for Path {
 
     #[inline]
     fn div(mut self, rhs: &String) -> Self::Output {
-        self.0.push(rhs.as_str());
+        self.0.push(rhs);
         self
     }
 }
@@ -119,7 +119,7 @@ impl Div<String> for Path {
 
     #[inline]
     fn div(mut self, rhs: String) -> Self::Output {
-        self.0.push(rhs.as_str());
+        self.0.push(rhs);
         self
     }
 }

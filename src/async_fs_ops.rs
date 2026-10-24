@@ -44,16 +44,15 @@ use crate::{
 /// current working directory. The behavior described below applies to that implementation.
 ///
 /// With this trait in scope, its methods take precedence over same-named synchronous
-/// [`std::path::Path`] methods exposed through dereferencing, such as `canonicalize`
-/// and `symlink_metadata`.
+/// [`std::path::Path`] methods exposed through dereferencing, such as `canonicalize`,
+/// `read_link`, and `symlink_metadata`.
 ///
 /// The [`Path`] implementation provides these shared behaviors:
 ///
 /// - Metadata and type checks follow symlinks, except [`Self::is_symlink`] and
-///   [`Self::symlink_metadata`]. Type checks
-///   return an error for missing paths, rather than `false`. [`Self::exists`] returns
-///   `false` for a missing target, including a dangling symlink, and propagates other
-///   inspection errors.
+///   [`Self::symlink_metadata`]. Type checks return an error for missing paths, rather
+///   than `false`. [`Self::exists`] returns `false` for a missing target, including a
+///   dangling symlink, and propagates other inspection errors.
 /// - [`Self::get_file_size`] returns metadata length in bytes, which is not necessarily
 ///   allocated disk space or a meaningful content size for non-files.
 /// - [`Self::open`] opens an existing file read-only. [`Self::open_with_options`] uses
@@ -66,6 +65,9 @@ use crate::{
 ///   within the polled future.
 /// - [`Self::truncate`] opens an existing file for writing and sets its length in bytes;
 ///   `None` means `0`. Extending a file fills the added range with zero bytes.
+/// - [`Self::touch`] updates only the modification time of an existing target to the
+///   current time, or creates a missing file, on Tokio's blocking pool. It does not
+///   truncate existing content or create parent directories.
 /// - [`Self::create_parent_dir`] creates only the immediate parent and returns `true` on
 ///   successful creation; an existing parent is an error. [`Self::create_parent_dir_all`]
 ///   creates missing ancestors and returns `true` on success even if the parent already
@@ -82,6 +84,10 @@ use crate::{
 ///   and returning the number of bytes copied. [`Self::rename_to`] renames to the exact
 ///   destination and returns a new [`Path`]; it does not update the source value or fall back
 ///   to copying across filesystems. Replacement rules depend on the platform.
+/// - Link methods use `self` as the source or target and `link` as the new link path.
+///   [`Self::hard_link`] requires filesystem support. [`Self::read_link`] returns the
+///   stored target without resolving it. The Unix-only `soft_link` method stores the
+///   target as supplied.
 ///
 /// Unix-only methods expose permission modes, owner and group IDs, and special-file
 /// checks. For ownership changes, `None` preserves the corresponding owner or group ID.
@@ -93,9 +99,9 @@ use crate::{
 /// or directory types, and unsupported operations. Directory collection methods also
 /// propagate iteration errors instead of returning partial collections. UTF-8 string
 /// reads fail for invalid UTF-8; JSON methods return [`serde_json::Error`], with
-/// filesystem errors wrapped by [`serde_json::Error::io`]. Unix ownership changes
-/// additionally propagate blocking-task join errors. Changes made before an error are
-/// not rolled back.
+/// filesystem errors wrapped by [`serde_json::Error::io`]. Unix ownership changes and
+/// [`Self::touch`] additionally propagate blocking-task join errors. Changes made before
+/// an error are not rolled back.
 ///
 /// # Panics
 ///
@@ -182,6 +188,8 @@ pub trait AsyncFsOps {
 
     async fn get_file_size(&self) -> IoResult<u64>;
 
+    async fn hard_link(&self, link: impl AsRef<StdPath> + Send) -> IoResult<()>;
+
     #[cfg(unix)]
     async fn is_block_device(&self) -> IoResult<bool>;
 
@@ -216,6 +224,8 @@ pub trait AsyncFsOps {
 
     async fn read_json<T: DeserializeOwned>(&self) -> JsonResult<T>;
 
+    async fn read_link(&self) -> IoResult<Path>;
+
     async fn read(&self) -> IoResult<Vec<u8>>;
 
     async fn read_to_string(&self) -> IoResult<String>;
@@ -230,11 +240,16 @@ pub trait AsyncFsOps {
 
     async fn set_permissions(&self, permissions: Permissions) -> IoResult<()>;
 
+    #[cfg(unix)]
+    async fn soft_link(&self, link: impl AsRef<StdPath> + Send) -> IoResult<()>;
+
     /// Returns metadata for the path itself without following a final symlink.
     ///
     /// Dangling symlinks can be inspected; missing paths return an error.
     /// Use [`crate::SyncFsOps::symlink_metadata_sync`] for synchronous access.
     async fn symlink_metadata(&self) -> IoResult<Metadata>;
+
+    async fn touch(&self) -> IoResult<()>;
 
     async fn truncate(&self, len: Option<u64>) -> IoResult<()>;
 
@@ -301,7 +316,7 @@ impl AsyncFsOps for Path {
         use std::os::windows::fs::FileTypeExt;
 
         if !self.exists().await? {
-            self.create_dir_all().await?;
+            return self.create_dir_all().await;
         }
 
         let mut entries = fs::read_dir(self).await?;
@@ -330,6 +345,10 @@ impl AsyncFsOps for Path {
 
     async fn get_file_size(&self) -> IoResult<u64> {
         Ok(self.metadata().await?.len())
+    }
+
+    async fn hard_link(&self, link: impl AsRef<StdPath> + Send) -> IoResult<()> {
+        fs::hard_link(self, link).await
     }
 
     #[cfg(unix)]
@@ -426,6 +445,10 @@ impl AsyncFsOps for Path {
         from_slice(&self.read().await.map_err(JsonError::io)?)
     }
 
+    async fn read_link(&self) -> IoResult<Path> {
+        fs::read_link(self).await.map(Self::from)
+    }
+
     async fn read_to_string(&self) -> IoResult<String> {
         fs::read_to_string(self).await
     }
@@ -451,8 +474,22 @@ impl AsyncFsOps for Path {
         fs::set_permissions(self, permissions).await
     }
 
+    #[cfg(unix)]
+    async fn soft_link(&self, link: impl AsRef<StdPath> + Send) -> IoResult<()> {
+        fs::symlink(self, link).await
+    }
+
     async fn symlink_metadata(&self) -> IoResult<Metadata> {
         fs::symlink_metadata(self).await
+    }
+
+    async fn touch(&self) -> IoResult<()> {
+        use tokio::task::spawn_blocking;
+
+        use crate::SyncFsOps;
+
+        let path = self.clone();
+        spawn_blocking(move || path.touch_sync()).await?
     }
 
     async fn truncate(&self, len: Option<u64>) -> IoResult<()> {

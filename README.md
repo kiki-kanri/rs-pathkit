@@ -58,22 +58,18 @@ let extension = config.extension();
 ```rust
 use pathkit::{
     SyncFsOps,
-    path
+    path,
 };
 
-let path = path!("/tmp/test.txt");
+let directory = tempfile::tempdir()?;
+let file = path!(directory.path()) / "message.txt";
 
-path.write_sync(b"Hello, world!")?;
-let content = path.read_sync()?;
-let file = path.open_sync()?;
+file.write_sync(b"Hello, world!")?;
+let content = file.read_sync()?;
+let size = file.get_file_size_sync()?;
 
-if path.exists_sync()? {
-    println!("File size: {}", path.get_file_size_sync()?);
-}
-
-let moved = path.rename_to_sync("/tmp/moved.txt")?;
+let moved = file.rename_to_sync(path!(directory.path()) / "moved.txt")?;
 let canonical = moved.canonicalize_sync()?;
-let config: Config = moved.read_json_sync()?;
 ```
 
 Use `open_with_options_sync()` when you need custom `std::fs::OpenOptions`.
@@ -85,21 +81,57 @@ Requires the `async-fs-ops` feature.
 ```rust
 use pathkit::{
     AsyncFsOps,
-    path
+    path,
 };
 
-let path = path!("/tmp/test.txt");
+let directory = tempfile::tempdir()?;
+let file = path!(directory.path()) / "nested" / "message.txt";
 
-path.write(b"Hello, world!").await?;
-let content = path.read().await?;
-let file = path.open().await?;
+file.create_parent_dir_all().await?;
+file.write(b"Hello, world!").await?;
+let content = file.read().await?;
 
-path.create_parent_dir_all().await?;
-let moved = path.rename_to("/tmp/moved.txt").await?;
+let moved = file.rename_to(path!(directory.path()) / "moved.txt").await?;
 let canonical = moved.canonicalize().await?;
 ```
 
 Use `open_with_options()` when you need custom `tokio::fs::OpenOptions`.
+
+### JSON Files
+
+JSON methods return `serde_json::Error`; filesystem failures are wrapped and can be
+inspected with `is_io()` and `io_error_kind()`.
+
+```rust
+use pathkit::{
+    SyncFsOps,
+    path,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
+struct Config {
+    name: String,
+    port: u16,
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let file = path!(directory.path()) / "config.json";
+    let config = Config {
+        name: "app".to_owned(),
+        port: 8080,
+    };
+
+    file.write_json_sync(&config)?;
+    let loaded: Config = file.read_json_sync()?;
+    assert_eq!(loaded, config);
+    Ok(())
+}
+```
 
 ### SeaORM Integration
 

@@ -497,61 +497,64 @@ fn test_chown_sync() -> Result<()> {
     Ok(())
 }
 
-#[cfg(unix)]
 // Test is_block_device_sync
+#[cfg(unix)]
 #[test]
 fn test_is_block_device_sync() -> Result<()> {
     let temp_file = NamedTempFile::new()?;
     assert!(!path!(&temp_file).is_block_device_sync()?);
-
-    let path = path!("/dev/sda"); // Common block device
-    if path.exists_sync()? {
-        // May fail if not root or device doesn't exist
-        let _ = path.is_block_device_sync();
-    }
-
     Ok(())
 }
 
-#[cfg(unix)]
 // Test is_char_device_sync
+#[cfg(unix)]
 #[test]
 fn test_is_char_device_sync() -> Result<()> {
     let temp_file = NamedTempFile::new()?;
     assert!(!path!(&temp_file).is_char_device_sync()?);
-
-    let path = path!("/dev/zero"); // Common char device
-    if path.exists_sync()? {
-        assert!(path.is_char_device_sync()?);
-    }
-
+    assert!(path!("/dev/null").is_char_device_sync()?);
     Ok(())
 }
 
+// Test is_fifo_sync
 #[cfg(unix)]
-// Test is_fifo_sync - simplified
 #[test]
 fn test_is_fifo_sync() -> Result<()> {
-    // FIFOs require special permissions to create
-    // Just test that non-fifo returns false
-    let path = path!("/tmp"); // This is not a fifo
-    assert!(!path.is_fifo_sync()?);
+    use std::{
+        ffi::CString,
+        io::Error as IoError,
+        os::unix::ffi::OsStrExt,
+    };
+
+    use libc::mkfifo;
+
+    let temp_dir = tempdir()?;
+    let fifo = path!(&temp_dir) / "fifo";
+    let fifo_path = CString::new(fifo.as_os_str().as_bytes())?;
+    // SAFETY: `fifo_path` is a valid NUL-terminated string that outlives the call.
+    if unsafe { mkfifo(fifo_path.as_ptr(), 0o600) } != 0 {
+        return Err(IoError::last_os_error().into());
+    }
+
+    assert!(fifo.is_fifo_sync()?);
+    assert!(!path!(&temp_dir).is_fifo_sync()?);
     Ok(())
 }
 
+// Test is_socket_sync
 #[cfg(unix)]
-// Test is_socket_sync - simplified
 #[test]
 fn test_is_socket_sync() -> Result<()> {
-    // Unix socket files are tricky to create and test
-    let path = path!("/tmp"); // This is not a socket
-    assert!(!path.is_socket_sync()?);
+    use std::os::unix::net::UnixListener;
+
+    let temp_dir = tempdir()?;
+    let socket = path!(&temp_dir) / "socket";
+    let _listener = UnixListener::bind(&socket)?;
+
+    assert!(socket.is_socket_sync()?);
+    assert!(!path!(&temp_dir).is_socket_sync()?);
     Ok(())
 }
-
-// ----------------------------------------------------------------
-// Tests for previously uncovered sync_fs_ops functions
-// ----------------------------------------------------------------
 
 #[test]
 fn test_copy_file_sync() -> Result<()> {
@@ -572,37 +575,30 @@ fn test_copy_file_sync() -> Result<()> {
 
 #[test]
 fn test_hard_link_sync() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let src = path!(&temp_file);
-    let link_path = path!(&temp_file).with_extension("link");
+    let temp_dir = tempdir()?;
+    let src = path!(&temp_dir) / "source.txt";
+    let link_path = path!(&temp_dir) / "hard-link.txt";
 
     src.write_sync(b"link test")?;
     src.hard_link_sync(&link_path)?;
 
-    // Both files should have same content
-    let content = fs::read(link_path.as_path())?;
-    assert_eq!(content, b"link test");
-
-    // And same inode (hard link)
-    let src_meta = fs::metadata(src.as_path())?;
-    let link_meta = fs::metadata(link_path.as_path())?;
+    assert_eq!(link_path.read_sync()?, b"link test");
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        assert_eq!(src_meta.ino(), link_meta.ino());
+
+        assert_eq!(src.metadata_sync()?.ino(), link_path.metadata_sync()?.ino());
     }
 
-    #[cfg(not(unix))]
-    let _ = (src_meta, link_meta);
     Ok(())
 }
 
 #[cfg(unix)]
 #[test]
 fn test_soft_link_sync() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let src = path!(&temp_file);
-    let link_path = path!(&temp_file).with_extension("sym");
+    let temp_dir = tempdir()?;
+    let src = path!(&temp_dir) / "source.txt";
+    let link_path = path!(&temp_dir) / "soft-link.txt";
 
     src.write_sync(b"symlink test")?;
     src.soft_link_sync(&link_path)?;
@@ -619,25 +615,22 @@ fn test_soft_link_sync() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn test_read_link_sync() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let src = path!(&temp_file);
-    let link_path = path!(&temp_file).with_extension("readlink");
+    let temp_dir = tempdir()?;
+    let target = path!(&temp_dir) / "missing.txt";
+    let link_path = path!(&temp_dir) / "link.txt";
 
-    src.write_sync(b"readlink test")?;
-    src.soft_link_sync(&link_path)?;
+    target.soft_link_sync(&link_path)?;
 
-    let link_target = link_path.read_link_sync()?;
-    assert_eq!(link_target.to_str(), src.to_str());
-
+    assert_eq!(link_path.read_link_sync()?, target);
     Ok(())
 }
 
 #[cfg(unix)]
 #[test]
 fn test_symlink_metadata_sync() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let src = path!(&temp_file);
-    let link_path = path!(&temp_file).with_extension("meta");
+    let temp_dir = tempdir()?;
+    let src = path!(&temp_dir) / "source.txt";
+    let link_path = path!(&temp_dir) / "link.txt";
 
     src.write_sync(b"meta test")?;
     src.soft_link_sync(&link_path)?;
@@ -662,21 +655,23 @@ fn test_touch_sync_creates_new_file() -> Result<()> {
 
 #[test]
 fn test_touch_sync_updates_existing() -> Result<()> {
+    use std::{
+        fs::File,
+        time::SystemTime,
+    };
+
     let temp_file = NamedTempFile::new()?;
     let path = path!(&temp_file);
-
-    // Record original mtime
-    let meta_before = fs::metadata(&temp_file)?;
-    let mtime_before = meta_before.modified()?;
-
-    // Wait a bit so mtime actually changes
-    std::thread::sleep(std::time::Duration::from_millis(10));
+    path.write_sync(b"preserved")?;
+    File::options()
+        .write(true)
+        .open(&path)?
+        .set_modified(SystemTime::UNIX_EPOCH)?;
 
     path.touch_sync()?;
 
-    let meta_after = fs::metadata(&temp_file)?;
-    let mtime_after = meta_after.modified()?;
-    assert!(mtime_after > mtime_before);
+    assert!(path.metadata_sync()?.modified()? > SystemTime::UNIX_EPOCH);
+    assert_eq!(path.read_sync()?, b"preserved");
     Ok(())
 }
 

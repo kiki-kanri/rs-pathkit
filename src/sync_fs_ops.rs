@@ -13,7 +13,6 @@ use std::{
     },
     io::Result as IoResult,
     path::Path as StdPath,
-    time::SystemTime,
 };
 
 use filetime::{
@@ -241,7 +240,9 @@ impl SyncFsOps for Path {
 
     #[cfg(unix)]
     fn chown_sync(&self, uid: Option<u32>, gid: Option<u32>) -> IoResult<()> {
-        std::os::unix::fs::chown(self, uid, gid)
+        use std::os::unix::fs::chown;
+
+        chown(self, uid, gid)
     }
 
     fn copy_file_sync(&self, dest: impl AsRef<StdPath>) -> IoResult<u64> {
@@ -450,9 +451,7 @@ impl SyncFsOps for Path {
             OpenOptions::new().write(true).create(true).truncate(false).open(self)?;
         }
 
-        let t = SystemTime::now();
-        set_file_mtime(self, FileTime::from_system_time(t))?;
-        Ok(())
+        set_file_mtime(self, FileTime::now())
     }
 
     fn truncate_sync(&self, len: Option<u64>) -> IoResult<()> {

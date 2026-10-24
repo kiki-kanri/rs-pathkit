@@ -676,56 +676,62 @@ async fn test_chown() -> Result<()> {
     Ok(())
 }
 
-#[cfg(unix)]
 // Test is_block_device
+#[cfg(unix)]
 #[tokio::test]
 async fn test_is_block_device() -> Result<()> {
     let temp_file = NamedTempFile::new()?;
     assert!(!path!(&temp_file).is_block_device().await?);
-
-    let path = path!("/dev/sda"); // Common block device
-    if path.exists().await? {
-        // May fail if not root or device doesn't exist
-        let _ = path.is_block_device().await;
-    }
-
     Ok(())
 }
 
-#[cfg(unix)]
 // Test is_char_device
+#[cfg(unix)]
 #[tokio::test]
 async fn test_is_char_device() -> Result<()> {
     let temp_file = NamedTempFile::new()?;
     assert!(!path!(&temp_file).is_char_device().await?);
-
-    let path = path!("/dev/zero"); // Common char device
-    if path.exists().await? {
-        assert!(path.is_char_device().await?);
-    }
-
+    assert!(path!("/dev/null").is_char_device().await?);
     Ok(())
 }
 
+// Test is_fifo
 #[cfg(unix)]
-// Test is_fifo - simplified, skip creation
 #[tokio::test]
 async fn test_is_fifo() -> Result<()> {
-    // FIFOs require special permissions to create
-    // Just test that non-fifo returns false
-    let path = path!("/tmp"); // This is not a fifo
-    assert!(!path.is_fifo().await?);
+    use std::{
+        ffi::CString,
+        io::Error as IoError,
+        os::unix::ffi::OsStrExt,
+    };
+
+    use libc::mkfifo;
+
+    let temp_dir = tempdir()?;
+    let fifo = path!(&temp_dir) / "fifo";
+    let fifo_path = CString::new(fifo.as_os_str().as_bytes())?;
+    // SAFETY: `fifo_path` is a valid NUL-terminated string that outlives the call.
+    if unsafe { mkfifo(fifo_path.as_ptr(), 0o600) } != 0 {
+        return Err(IoError::last_os_error().into());
+    }
+
+    assert!(fifo.is_fifo().await?);
+    assert!(!path!(&temp_dir).is_fifo().await?);
     Ok(())
 }
 
+// Test is_socket
 #[cfg(unix)]
-// Test is_socket - simplified
 #[tokio::test]
 async fn test_is_socket() -> Result<()> {
-    // Unix socket files are tricky to create and test
-    // Just test that non-socket returns false
-    let path = path!("/tmp"); // This is not a socket
-    assert!(!path.is_socket().await?);
+    use std::os::unix::net::UnixListener;
+
+    let temp_dir = tempdir()?;
+    let socket = path!(&temp_dir) / "socket";
+    let _listener = UnixListener::bind(&socket)?;
+
+    assert!(socket.is_socket().await?);
+    assert!(!path!(&temp_dir).is_socket().await?);
     Ok(())
 }
 
@@ -744,6 +750,93 @@ async fn test_copy_file() -> Result<()> {
 
     let content = dst.read().await?;
     assert_eq!(content, b"hello world");
+    Ok(())
+}
+
+// Test hard_link
+#[tokio::test]
+async fn test_hard_link() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let src = path!(&temp_dir) / "source.txt";
+    let link = path!(&temp_dir) / "hard-link.txt";
+
+    src.write(b"link test").await?;
+    src.hard_link(&link).await?;
+
+    assert_eq!(link.read().await?, b"link test");
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+
+        assert_eq!(src.metadata().await?.ino(), link.metadata().await?.ino());
+    }
+
+    Ok(())
+}
+
+// Test soft_link
+#[cfg(unix)]
+#[tokio::test]
+async fn test_soft_link() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let src = path!(&temp_dir) / "source.txt";
+    let link = path!(&temp_dir) / "soft-link.txt";
+
+    src.write(b"symlink test").await?;
+    src.soft_link(&link).await?;
+
+    assert_eq!(link.read().await?, b"symlink test");
+    assert!(link.is_symlink().await?);
+    Ok(())
+}
+
+// Test read_link
+#[cfg(unix)]
+#[tokio::test]
+async fn test_read_link() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let target = path!(&temp_dir) / "missing.txt";
+    let link = path!(&temp_dir) / "link.txt";
+
+    target.soft_link(&link).await?;
+
+    assert_eq!(link.read_link().await?, target);
+    Ok(())
+}
+
+// Test touch
+#[tokio::test]
+async fn test_touch_creates_new_file() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path!(&temp_dir) / "touched.txt";
+
+    path.touch().await?;
+
+    assert!(path.is_file().await?);
+    assert_eq!(path.read().await?, b"");
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_touch_updates_existing_without_truncating() -> Result<()> {
+    use std::{
+        fs::File,
+        time::SystemTime,
+    };
+
+    let temp_file = NamedTempFile::new()?;
+    let path = path!(&temp_file);
+    path.write(b"preserved").await?;
+    File::options()
+        .write(true)
+        .open(&path)?
+        .set_modified(SystemTime::UNIX_EPOCH)?;
+
+    path.touch().await?;
+
+    assert!(path.metadata().await?.modified()? > SystemTime::UNIX_EPOCH);
+    assert_eq!(path.read().await?, b"preserved");
     Ok(())
 }
 

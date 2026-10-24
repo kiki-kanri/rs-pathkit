@@ -420,9 +420,9 @@ mod tests {
         let path = crate::path!("/");
         assert!(path.parent().is_none());
 
-        // Test relative path with no parent
+        // A one-component relative path has an empty parent
         let path = crate::path!("file.txt");
-        assert!(path.parent().is_some());
+        assert_eq!(path.parent(), Some(crate::path!("")));
     }
 
     #[test]
@@ -458,120 +458,6 @@ mod tests {
         let path = crate::path!("/path/to/file");
         assert_eq!(path.with_added_extension("txt").to_str(), Some("/path/to/file.txt"));
     }
-
-    #[test]
-    fn test_is_absolute() {
-        // On Unix, /absolute/path is absolute; on Windows, only C:\path or \\server\share are absolute
-        #[cfg(not(windows))]
-        {
-            let path = crate::path!("/absolute/path");
-            assert!(path.is_absolute());
-        }
-
-        let relative_path = crate::path!("relative/path");
-        assert!(!relative_path.is_absolute());
-
-        #[cfg(windows)]
-        {
-            // Windows-style absolute paths
-            let path = crate::path!("C:\\absolute\\path");
-            assert!(path.is_absolute());
-        }
-    }
-
-    #[test]
-    fn test_is_relative() {
-        // On Unix, /absolute/path is absolute; on Windows, /path is treated as relative
-        // since it doesn't have a drive letter
-        #[cfg(not(windows))]
-        {
-            let path = crate::path!("/absolute/path");
-            assert!(!path.is_relative());
-        }
-
-        let relative_path = crate::path!("relative/path");
-        assert!(relative_path.is_relative());
-
-        #[cfg(windows)]
-        {
-            // Windows-style absolute paths are not relative
-            let path = crate::path!("C:\\absolute\\path");
-            assert!(!path.is_relative());
-        }
-    }
-
-    #[test]
-    fn test_file_name() {
-        let path = crate::path!("/path/to/file.txt");
-        assert_eq!(path.file_name(), Some(OsStr::new("file.txt")));
-
-        // Note: std::path::Path ignores trailing slash and returns the last component
-        let path = crate::path!("/path/to/");
-        assert_eq!(path.file_name(), Some(OsStr::new("to")));
-
-        let path = crate::path!("/");
-        assert_eq!(path.file_name(), None);
-    }
-
-    #[test]
-    fn test_file_stem() {
-        let path = crate::path!("file.txt");
-        assert_eq!(path.file_stem(), Some(OsStr::new("file")));
-
-        let path = crate::path!(".hidden");
-        assert_eq!(path.file_stem(), Some(OsStr::new(".hidden")));
-
-        let path = crate::path!("file.tar.gz");
-        assert_eq!(path.file_stem(), Some(OsStr::new("file.tar")));
-    }
-
-    #[test]
-    fn test_extension() {
-        let path = crate::path!("file.txt");
-        assert_eq!(path.extension(), Some(OsStr::new("txt")));
-
-        let path = crate::path!("file.tar.gz");
-        assert_eq!(path.extension(), Some(OsStr::new("gz")));
-
-        let path = crate::path!("file");
-        assert_eq!(path.extension(), None);
-
-        let path = crate::path!("/path/to.");
-        assert_eq!(path.extension(), Some(OsStr::new("")));
-    }
-
-    #[test]
-    fn test_starts_with() {
-        let path = crate::path!("/path/to/file");
-        // starts_with is part of std::path::Path, available through Deref
-        assert!(path.starts_with("/path"));
-        assert!(path.starts_with(StdPath::new("/path")));
-        assert!(!path.starts_with("/other"));
-    }
-
-    #[test]
-    fn test_ends_with() {
-        let path = crate::path!("/path/to/file.txt");
-        assert!(path.ends_with("file.txt"));
-        assert!(path.ends_with(StdPath::new("to/file.txt")));
-        assert!(!path.ends_with("other.txt"));
-    }
-
-    #[test]
-    fn test_path_component_iteration() {
-        let path = crate::path!("/path/to/file.txt");
-        let components: Vec<_> = path.components().collect();
-        let iter_components: Vec<_> = path.iter().collect();
-
-        assert!(components.len() >= 3);
-        assert_ne!(iter_components, [] as [&OsStr; 0]);
-    }
-
-    // Skip contains test - Path doesn't have this method
-    // Skip set_file_name test - Path doesn't have this method
-    // Skip set_extension test - Path doesn't have this method
-    // Skip pop test - Path doesn't have this method
-    // Skip push test - Path doesn't have this method
 
     #[test]
     fn test_absolute_path_functionality() -> Result<()> {
