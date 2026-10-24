@@ -43,7 +43,8 @@ use crate::{
 ///
 /// The [`Path`] implementation provides these shared behaviors:
 ///
-/// - Metadata and type checks follow symlinks, except [`Self::is_symlink`]. Type checks
+/// - Metadata and type checks follow symlinks, except [`Self::is_symlink`] and
+///   [`Self::symlink_metadata`]. Type checks
 ///   return an error for missing paths, rather than `false`. [`Self::exists`] returns
 ///   `false` for a missing target, including a dangling symlink, and propagates other
 ///   inspection errors.
@@ -192,6 +193,14 @@ pub trait AsyncFsOps {
 
     async fn set_permissions(&self, permissions: Permissions) -> Result<()>;
 
+    /// Returns metadata for the path itself without following a final symlink.
+    ///
+    /// Dangling symlinks can be inspected; missing paths return an error.
+    /// With this trait in scope, this method takes precedence over the synchronous
+    /// [`std::path::Path::symlink_metadata`] method exposed through dereferencing.
+    /// Use [`crate::SyncFsOps::symlink_metadata_sync`] for synchronous access.
+    async fn symlink_metadata(&self) -> Result<Metadata>;
+
     async fn truncate(&self, len: Option<u64>) -> Result<()>;
 
     async fn write_json<T: Serialize + Send>(&self, data: T) -> Result<()>;
@@ -319,7 +328,7 @@ impl AsyncFsOps for Path {
     }
 
     async fn is_symlink(&self) -> Result<bool> {
-        Ok(fs::symlink_metadata(self).await?.file_type().is_symlink())
+        Ok(self.symlink_metadata().await?.file_type().is_symlink())
     }
 
     async fn metadata(&self) -> Result<Metadata> {
@@ -399,6 +408,10 @@ impl AsyncFsOps for Path {
 
     async fn set_permissions(&self, permissions: Permissions) -> Result<()> {
         Ok(fs::set_permissions(self, permissions).await?)
+    }
+
+    async fn symlink_metadata(&self) -> Result<Metadata> {
+        Ok(fs::symlink_metadata(self).await?)
     }
 
     async fn truncate(&self, len: Option<u64>) -> Result<()> {

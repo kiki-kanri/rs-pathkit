@@ -1,5 +1,10 @@
 #![cfg(feature = "async-fs-ops")]
 
+use std::io::{
+    Error as IoError,
+    ErrorKind as IoErrorKind,
+};
+
 use anyhow::{
     Result,
     anyhow,
@@ -107,6 +112,54 @@ async fn test_metadata() -> Result<()> {
 
     let metadata = file_path.metadata().await?;
     assert!(metadata.is_file());
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_symlink_metadata_for_regular_file() -> Result<()> {
+    let temp_file = NamedTempFile::new()?;
+    let file_path = path!(&temp_file);
+
+    assert!(file_path.symlink_metadata().await?.is_file());
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_symlink_metadata_for_missing_path() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let missing = path!(&temp_dir) / "missing";
+
+    let error = missing
+        .symlink_metadata()
+        .await
+        .err()
+        .ok_or_else(|| anyhow!("expected missing path error"))?;
+
+    assert_eq!(
+        error.downcast_ref::<IoError>().map(IoError::kind),
+        Some(IoErrorKind::NotFound)
+    );
+
+    Ok(())
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn test_symlink_metadata_does_not_follow_links() -> Result<()> {
+    use std::os::unix::fs::symlink;
+
+    let temp_dir = tempdir()?;
+    let target = path!(&temp_dir) / "target.txt";
+    let link = path!(&temp_dir) / "link.txt";
+    async_fs::write(&target, "test").await?;
+    symlink(&target, &link)?;
+
+    assert!(link.symlink_metadata().await?.file_type().is_symlink());
+    assert!(link.metadata().await?.is_file());
+
+    async_fs::remove_file(&target).await?;
+    assert!(link.symlink_metadata().await?.file_type().is_symlink());
+    assert!(link.metadata().await.is_err());
     Ok(())
 }
 

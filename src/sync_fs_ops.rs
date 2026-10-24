@@ -306,7 +306,7 @@ impl SyncFsOps for Path {
     }
 
     fn is_symlink_sync(&self) -> Result<bool> {
-        Ok(fs::symlink_metadata(self)?.file_type().is_symlink())
+        Ok(self.symlink_metadata_sync()?.file_type().is_symlink())
     }
 
     fn metadata_sync(&self) -> Result<Metadata> {
