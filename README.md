@@ -73,6 +73,7 @@ let canonical = moved.canonicalize_sync()?;
 ```
 
 Use `open_with_options_sync()` when you need custom `std::fs::OpenOptions`.
+Use `write_atomic_sync()` to replace a file without readers observing partial contents.
 
 ### Asynchronous File Operations
 
@@ -96,6 +97,7 @@ let canonical = moved.canonicalize().await?;
 ```
 
 Use `open_with_options()` when you need custom `tokio::fs::OpenOptions`.
+Use `write_atomic()` to replace a file without readers observing partial contents.
 
 ### JSON Files
 

@@ -11,8 +11,22 @@ use std::{
         Permissions,
         ReadDir,
     },
-    io::Result as IoResult,
+    io::{
+        Error as IoError,
+        ErrorKind as IoErrorKind,
+        Result as IoResult,
+        Write,
+    },
     path::Path as StdPath,
+    process,
+    sync::atomic::{
+        AtomicU64,
+        Ordering,
+    },
+    time::{
+        SystemTime,
+        UNIX_EPOCH,
+    },
 };
 
 use filetime::{
@@ -57,6 +71,15 @@ use crate::{
 /// - [`Self::write_sync`] and [`Self::write_json_sync`] create or truncate a file without
 ///   creating parent directories. JSON uses pretty serialization. [`Self::read_json_sync`]
 ///   deserializes the complete file contents.
+/// - [`Self::write_atomic_sync`] writes to a temporary file in the destination's directory,
+///   syncs it, and replaces the destination, so readers see either the old or the new
+///   contents. [`Self::write_atomic_with_sync`] first runs `prepare` on the empty temporary
+///   file, for example to set permissions. The temporary file is created with mode `0600` on
+///   Unix or inherits the parent directory's ACL on Windows; the destination keeps its final
+///   permissions. On failure, the temporary file is removed when possible.
+/// - [`Self::persist_to_sync`] syncs this file and replaces the exact destination the same
+///   way, without falling back to copying across filesystems. On Windows, replacement can fail
+///   while the destination is open or when a path exceeds `MAX_PATH`.
 /// - [`Self::truncate_sync`] opens an existing file for writing and sets its length in
 ///   bytes; `None` means `0`. Extending a file fills the added range with zero bytes.
 /// - [`Self::touch_sync`] updates only the modification time of an existing target to
@@ -186,6 +209,8 @@ pub trait SyncFsOps {
 
     fn open_with_options_sync(&self, options: &OpenOptions) -> IoResult<File>;
 
+    fn persist_to_sync(&self, dest: impl AsRef<StdPath>) -> IoResult<Path>;
+
     fn read_dir_entries_sync(&self) -> IoResult<Vec<PathEntry>>;
 
     fn read_dir_names_sync(&self) -> IoResult<Vec<String>>;
@@ -212,6 +237,8 @@ pub trait SyncFsOps {
 
     fn set_permissions_sync(&self, permissions: Permissions) -> IoResult<()>;
 
+    // TODO: Add Windows `symlink_file` and `symlink_dir` variants; Windows requires the link type
+    // to be chosen explicitly instead of inferred from the target.
     #[cfg(unix)]
     fn soft_link_sync(&self, link: impl AsRef<StdPath>) -> IoResult<()>;
 
@@ -220,6 +247,14 @@ pub trait SyncFsOps {
     fn touch_sync(&self) -> IoResult<()>;
 
     fn truncate_sync(&self, len: Option<u64>) -> IoResult<()>;
+
+    fn write_atomic_sync(&self, contents: impl AsRef<[u8]>) -> IoResult<()>;
+
+    fn write_atomic_with_sync(
+        &self,
+        contents: impl AsRef<[u8]>,
+        prepare: impl FnOnce(&Path) -> IoResult<()>,
+    ) -> IoResult<()>;
 
     fn write_json_sync<T: Serialize>(&self, data: T) -> JsonResult<()>;
 
@@ -367,6 +402,12 @@ impl SyncFsOps for Path {
         options.open(self)
     }
 
+    fn persist_to_sync(&self, dest: impl AsRef<StdPath>) -> IoResult<Path> {
+        sync_file(self)?;
+        replace_durably(self, dest.as_ref())?;
+        Ok(Self::new(dest))
+    }
+
     fn read_dir_entries_sync(&self) -> IoResult<Vec<PathEntry>> {
         let mut entries = Vec::new();
         for entry in fs::read_dir(self)? {
@@ -458,6 +499,24 @@ impl SyncFsOps for Path {
         OpenOptions::new().write(true).open(self)?.set_len(len.unwrap_or(0))
     }
 
+    fn write_atomic_sync(&self, contents: impl AsRef<[u8]>) -> IoResult<()> {
+        self.write_atomic_with_sync(contents, |_| Ok(()))
+    }
+
+    fn write_atomic_with_sync(
+        &self,
+        contents: impl AsRef<[u8]>,
+        prepare: impl FnOnce(&Path) -> IoResult<()>,
+    ) -> IoResult<()> {
+        let (temp_path, file) = create_temp_sibling(self)?;
+        let result = write_and_replace(file, &temp_path, self, contents.as_ref(), prepare);
+        if result.is_err() {
+            let _ = fs::remove_file(&temp_path);
+        }
+
+        result
+    }
+
     fn write_json_sync<T: Serialize>(&self, data: T) -> JsonResult<()> {
         self.write_sync(to_vec_pretty(&data)?).map_err(JsonError::io)
     }
@@ -465,4 +524,128 @@ impl SyncFsOps for Path {
     fn write_sync(&self, contents: impl AsRef<[u8]>) -> IoResult<()> {
         fs::write(self, contents)
     }
+}
+
+// Constants/Statics
+const TEMP_FILE_ATTEMPTS: u32 = 64;
+static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+// Functions
+fn create_temp_sibling(path: &Path) -> IoResult<(Path, File)> {
+    #[cfg(unix)]
+    use std::os::unix::fs::OpenOptionsExt;
+
+    if path.file_name().is_none() {
+        return Err(IoError::new(
+            IoErrorKind::InvalidInput,
+            "atomic write path has no file name",
+        ));
+    }
+
+    let parent = parent_or_current_dir(path);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.subsec_nanos());
+
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+
+    for _ in 0..TEMP_FILE_ATTEMPTS {
+        let counter = TEMP_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
+        // Keep the name short and independent of the destination to stay within name length limits.
+        let temp_path = Path::from(parent.join(format!(".pathkit-{:x}-{nanos:x}-{counter:x}.tmp", process::id())));
+        match options.open(&temp_path) {
+            Ok(file) => return Ok((temp_path, file)),
+            Err(error) if error.kind() == IoErrorKind::AlreadyExists => {},
+            Err(error) => return Err(error),
+        }
+    }
+
+    Err(IoError::new(
+        IoErrorKind::AlreadyExists,
+        "failed to create a unique temporary file for atomic write",
+    ))
+}
+
+fn parent_or_current_dir(path: &StdPath) -> &StdPath {
+    path.parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| StdPath::new("."))
+}
+
+#[cfg(not(windows))]
+fn replace_durably(source: &StdPath, dest: &StdPath) -> IoResult<()> {
+    fs::rename(source, dest)?;
+
+    #[cfg(unix)]
+    File::open(parent_or_current_dir(dest))?.sync_all()?;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn replace_durably(source: &StdPath, dest: &StdPath) -> IoResult<()> {
+    use std::os::windows::ffi::OsStrExt;
+
+    use windows_sys::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING,
+        MOVEFILE_WRITE_THROUGH,
+        MoveFileExW,
+    };
+
+    fn wide_path(path: &StdPath) -> IoResult<Vec<u16>> {
+        let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+        if wide.contains(&0) {
+            return Err(IoError::new(IoErrorKind::InvalidInput, "path contains a NUL character"));
+        }
+
+        wide.push(0);
+        Ok(wide)
+    }
+
+    let source = wide_path(source)?;
+    let dest = wide_path(dest)?;
+
+    // SAFETY: both paths are NUL-terminated UTF-16 strings without interior NULs that outlive the call.
+    let replaced = unsafe {
+        MoveFileExW(
+            source.as_ptr(),
+            dest.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+
+    if replaced == 0 {
+        return Err(IoError::last_os_error());
+    }
+
+    Ok(())
+}
+
+// TODO: On macOS, `sync_all` uses `F_FULLFSYNC`, which some filesystems (SMB, VirtioFS, some FUSE)
+// reject; fall back to `fsync` for those errors here and in `write_and_replace` and `replace_durably`.
+fn sync_file(path: &StdPath) -> IoResult<()> {
+    // Windows requires write access to flush file buffers.
+    #[cfg(windows)]
+    let file = OpenOptions::new().write(true).open(path)?;
+    #[cfg(not(windows))]
+    let file = File::open(path)?;
+
+    file.sync_all()
+}
+
+fn write_and_replace(
+    mut file: File,
+    temp_path: &Path,
+    dest: &Path,
+    contents: &[u8],
+    prepare: impl FnOnce(&Path) -> IoResult<()>,
+) -> IoResult<()> {
+    prepare(temp_path)?;
+    file.write_all(contents)?;
+    file.sync_all()?;
+    // Windows cannot replace the destination while this handle is open.
+    drop(file);
+    replace_durably(temp_path, dest)
 }

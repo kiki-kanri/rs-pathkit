@@ -63,6 +63,16 @@ use crate::{
 ///   parent directories. JSON uses pretty serialization. [`Self::read_json`] deserializes
 ///   the complete file contents. JSON serialization and deserialization run synchronously
 ///   within the polled future.
+/// - [`Self::write_atomic`] writes to a temporary file in the destination's directory, syncs
+///   it, and replaces the destination, so readers see either the old or the new contents.
+///   [`Self::write_atomic_with`] first runs `prepare` on the empty temporary file, for example
+///   to set permissions. The temporary file is created with mode `0600` on Unix or inherits
+///   the parent directory's ACL on Windows; the destination keeps its final permissions. On
+///   failure, the temporary file is removed when possible. File operations and `prepare` run
+///   on Tokio's blocking pool.
+/// - [`Self::persist_to`] syncs this file and replaces the exact destination the same way,
+///   without falling back to copying across filesystems. On Windows, replacement can fail
+///   while the destination is open or when a path exceeds `MAX_PATH`.
 /// - [`Self::truncate`] opens an existing file for writing and sets its length in bytes;
 ///   `None` means `0`. Extending a file fills the added range with zero bytes.
 /// - [`Self::touch`] updates only the modification time of an existing target to the
@@ -99,9 +109,9 @@ use crate::{
 /// or directory types, and unsupported operations. Directory collection methods also
 /// propagate iteration errors instead of returning partial collections. UTF-8 string
 /// reads fail for invalid UTF-8; JSON methods return [`serde_json::Error`], with
-/// filesystem errors wrapped by [`serde_json::Error::io`]. Unix ownership changes and
-/// [`Self::touch`] additionally propagate blocking-task join errors. Changes made before
-/// an error are not rolled back.
+/// filesystem errors wrapped by [`serde_json::Error::io`]. Operations that run on Tokio's
+/// blocking pool also propagate blocking-task join errors. Changes made before an error are
+/// not rolled back.
 ///
 /// # Panics
 ///
@@ -214,6 +224,8 @@ pub trait AsyncFsOps {
 
     async fn open_with_options(&self, options: &OpenOptions) -> IoResult<File>;
 
+    async fn persist_to(&self, dest: impl AsRef<StdPath> + Send) -> IoResult<Path>;
+
     async fn read_dir(&self) -> IoResult<ReadDir>;
 
     async fn read_dir_entries(&self) -> IoResult<Vec<AsyncPathEntry>>;
@@ -240,6 +252,8 @@ pub trait AsyncFsOps {
 
     async fn set_permissions(&self, permissions: Permissions) -> IoResult<()>;
 
+    // TODO: Add Windows `symlink_file` and `symlink_dir` variants; Windows requires the link type
+    // to be chosen explicitly instead of inferred from the target.
     #[cfg(unix)]
     async fn soft_link(&self, link: impl AsRef<StdPath> + Send) -> IoResult<()>;
 
@@ -252,6 +266,14 @@ pub trait AsyncFsOps {
     async fn touch(&self) -> IoResult<()>;
 
     async fn truncate(&self, len: Option<u64>) -> IoResult<()>;
+
+    async fn write_atomic(&self, contents: impl AsRef<[u8]> + Send) -> IoResult<()>;
+
+    async fn write_atomic_with(
+        &self,
+        contents: impl AsRef<[u8]> + Send,
+        prepare: impl for<'a> FnOnce(&'a Path) -> IoResult<()> + Send + 'static,
+    ) -> IoResult<()>;
 
     async fn write_json<T: Serialize + Send>(&self, data: T) -> JsonResult<()>;
 
@@ -403,6 +425,16 @@ impl AsyncFsOps for Path {
         options.open(self).await
     }
 
+    async fn persist_to(&self, dest: impl AsRef<StdPath> + Send) -> IoResult<Path> {
+        use tokio::task::spawn_blocking;
+
+        use crate::SyncFsOps;
+
+        let source = self.clone();
+        let dest = Self::new(dest);
+        spawn_blocking(move || source.persist_to_sync(dest)).await?
+    }
+
     async fn read(&self) -> IoResult<Vec<u8>> {
         fs::read(self).await
     }
@@ -499,6 +531,24 @@ impl AsyncFsOps for Path {
             .await?
             .set_len(len.unwrap_or(0))
             .await
+    }
+
+    async fn write_atomic(&self, contents: impl AsRef<[u8]> + Send) -> IoResult<()> {
+        self.write_atomic_with(contents, |_| Ok(())).await
+    }
+
+    async fn write_atomic_with(
+        &self,
+        contents: impl AsRef<[u8]> + Send,
+        prepare: impl for<'a> FnOnce(&'a Path) -> IoResult<()> + Send + 'static,
+    ) -> IoResult<()> {
+        use tokio::task::spawn_blocking;
+
+        use crate::SyncFsOps;
+
+        let path = self.clone();
+        let contents = contents.as_ref().to_vec();
+        spawn_blocking(move || path.write_atomic_with_sync(contents, prepare)).await?
     }
 
     async fn write_json<T: Serialize + Send>(&self, data: T) -> JsonResult<()> {

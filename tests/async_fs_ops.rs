@@ -295,6 +295,55 @@ async fn test_truncate() -> Result<()> {
     Ok(())
 }
 
+// Test write_atomic
+#[tokio::test]
+async fn test_write_atomic_replaces_existing_file() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path!(&temp_dir) / "config.json";
+    path.write(b"old").await?;
+
+    path.write_atomic(b"new").await?;
+
+    assert_eq!(path.read().await?, b"new");
+    assert_eq!(path!(&temp_dir).read_dir_names().await?, ["config.json"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_write_atomic_with_prepares_empty_temporary_file() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path!(&temp_dir) / "secret.key";
+    let parent = path.parent();
+
+    path.write_atomic_with(b"secret", move |temp_path| {
+        assert_eq!(temp_path.parent(), parent);
+        assert_eq!(temp_path.get_file_size_sync()?, 0);
+        Ok(())
+    })
+    .await?;
+
+    assert_eq!(path.read().await?, b"secret");
+    assert_eq!(path!(&temp_dir).read_dir_names().await?, ["secret.key"]);
+    Ok(())
+}
+
+// Test persist_to
+#[tokio::test]
+async fn test_persist_to_replaces_destination() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let src = path!(&temp_dir) / "prepared.tmp";
+    let dest = path!(&temp_dir) / "dest.txt";
+    src.write(b"new").await?;
+    dest.write(b"old").await?;
+
+    let persisted = src.persist_to(&dest).await?;
+
+    assert_eq!(persisted, dest);
+    assert!(!src.exists().await?);
+    assert_eq!(dest.read().await?, b"new");
+    Ok(())
+}
+
 // Test read_json and write_json
 #[tokio::test]
 async fn test_read_write_json() -> Result<()> {

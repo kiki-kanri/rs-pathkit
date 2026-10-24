@@ -1,6 +1,7 @@
 use std::{
     fs,
     io::{
+        Error as IoError,
         ErrorKind as IoErrorKind,
         Read,
         Write,
@@ -248,6 +249,108 @@ fn test_truncate_sync() -> Result<()> {
 
     let size = file_path.get_file_size_sync()?;
     assert_eq!(size, 5);
+    Ok(())
+}
+
+// Test write_atomic_sync
+#[test]
+fn test_write_atomic_sync_replaces_existing_file() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path!(&temp_dir) / "config.json";
+    path.write_sync(b"old")?;
+
+    path.write_atomic_sync(b"new")?;
+
+    assert_eq!(path.read_sync()?, b"new");
+    assert_eq!(path!(&temp_dir).read_dir_names_sync()?, ["config.json"]);
+    Ok(())
+}
+
+#[test]
+fn test_write_atomic_with_sync_prepares_empty_temporary_file() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path!(&temp_dir) / "secret.key";
+
+    path.write_atomic_with_sync(b"secret", |temp_path| {
+        assert_ne!(temp_path, &path);
+        assert_eq!(temp_path.parent(), path.parent());
+        assert_eq!(temp_path.get_file_size_sync()?, 0);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            assert_eq!(temp_path.metadata_sync()?.permissions().mode() & 0o077, 0);
+            temp_path.chmod_sync(0o640)?;
+        }
+
+        Ok(())
+    })?;
+
+    assert_eq!(path.read_sync()?, b"secret");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        assert_eq!(path.metadata_sync()?.permissions().mode() & 0o777, 0o640);
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_write_atomic_with_sync_removes_temporary_file_on_failure() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path!(&temp_dir) / "config.json";
+    path.write_sync(b"old")?;
+
+    let error = path
+        .write_atomic_with_sync(b"new", |_| Err(IoError::other("prepare failed")))
+        .err()
+        .ok_or_else(|| anyhow!("expected prepare error"))?;
+
+    assert_eq!(error.kind(), IoErrorKind::Other);
+    assert_eq!(path.read_sync()?, b"old");
+    assert_eq!(path!(&temp_dir).read_dir_names_sync()?, ["config.json"]);
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_write_atomic_sync_accepts_maximum_length_file_name() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path!(&temp_dir) / "a".repeat(255);
+
+    path.write_atomic_sync(b"long name")?;
+
+    assert_eq!(path.read_sync()?, b"long name");
+    Ok(())
+}
+
+#[test]
+fn test_write_atomic_sync_rejects_path_without_file_name() -> Result<()> {
+    let error = path!("/")
+        .write_atomic_sync(b"data")
+        .err()
+        .ok_or_else(|| anyhow!("expected missing file name error"))?;
+
+    assert_eq!(error.kind(), IoErrorKind::InvalidInput);
+    Ok(())
+}
+
+// Test persist_to_sync
+#[test]
+fn test_persist_to_sync_replaces_destination() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let src = path!(&temp_dir) / "prepared.tmp";
+    let dest = path!(&temp_dir) / "dest.txt";
+    src.write_sync(b"new")?;
+    dest.write_sync(b"old")?;
+
+    let persisted = src.persist_to_sync(&dest)?;
+
+    assert_eq!(persisted, dest);
+    assert!(!src.exists_sync()?);
+    assert_eq!(dest.read_sync()?, b"new");
     Ok(())
 }
 

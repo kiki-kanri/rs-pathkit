@@ -184,7 +184,7 @@ tokio = { version = "1.54.1", features = ["fs", "rt", "io-util"], optional = tru
 
 
 [target.'cfg(windows)'.dependencies]
-
+windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
 
 # Linux-only deps.
 [target.'cfg(target_os = "linux")'.dependencies]
