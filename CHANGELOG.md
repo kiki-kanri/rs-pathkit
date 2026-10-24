@@ -1,5 +1,61 @@
 # Changelog
 
+## v3.0.0
+
+[compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v2.0.0...v3.0.0)
+
+### 🚀 Enhancements
+
+- Add Dylint setup and unified code-fix scripts ([e340201](https://github.com/kiki-kanri/rs-pathkit/commit/e340201))
+- **scripts:** Add Windows MSVC cross-target fix tooling ([95f8aaf](https://github.com/kiki-kanri/rs-pathkit/commit/95f8aaf))
+- **fs:** ⚠️  Add async symlink metadata inspection ([eba6733](https://github.com/kiki-kanri/rs-pathkit/commit/eba6733))
+- **fs:** ⚠️  Add async canonicalization and rename sync API ([843b8b7](https://github.com/kiki-kanri/rs-pathkit/commit/843b8b7))
+- **fs:** ⚠️  Add async link and touch operations ([4529396](https://github.com/kiki-kanri/rs-pathkit/commit/4529396))
+- **fs:** ⚠️  Add atomic writes and file persistence ([62af034](https://github.com/kiki-kanri/rs-pathkit/commit/62af034))
+
+### 🔥 Performance
+
+- **path:** Reuse owned buffers in conversions and joins ([67ca962](https://github.com/kiki-kanri/rs-pathkit/commit/67ca962))
+
+### 🩹 Fixes
+
+- Include toolchain libraries in fix script search path ([8b3e0d8](https://github.com/kiki-kanri/rs-pathkit/commit/8b3e0d8))
+- Include toolchain libraries in Windows MSVC environment ([f53a2c1](https://github.com/kiki-kanri/rs-pathkit/commit/f53a2c1))
+- **fs:** Expose read_link_sync on supported platforms ([3003e13](https://github.com/kiki-kanri/rs-pathkit/commit/3003e13))
+- **fs:** Remove directory symlinks correctly when emptying directories ([547980a](https://github.com/kiki-kanri/rs-pathkit/commit/547980a))
+- **fs:** Clean up atomic write temporary files on panic ([b749504](https://github.com/kiki-kanri/rs-pathkit/commit/b749504))
+
+### 💅 Refactors
+
+- **path:** ⚠️  Remove implicit string conversions ([60c5aa7](https://github.com/kiki-kanri/rs-pathkit/commit/60c5aa7))
+- **fs:** ⚠️  Expose typed I/O and JSON errors ([f0b64a4](https://github.com/kiki-kanri/rs-pathkit/commit/f0b64a4))
+- **fs:** Simplify async chown function reference ([d9763ad](https://github.com/kiki-kanri/rs-pathkit/commit/d9763ad))
+- **fs:** Consolidate async filesystem imports ([842047c](https://github.com/kiki-kanri/rs-pathkit/commit/842047c))
+
+### 🏡 Chore
+
+- **lints:** Enforce cloning and test module conventions ([8d1aae7](https://github.com/kiki-kanri/rs-pathkit/commit/8d1aae7))
+- **dylint:** Track rules from the main branch ([f21c004](https://github.com/kiki-kanri/rs-pathkit/commit/f21c004))
+- Update mordant rules ([86817bf](https://github.com/kiki-kanri/rs-pathkit/commit/86817bf))
+- Upgrade deps ([78d68d2](https://github.com/kiki-kanri/rs-pathkit/commit/78d68d2))
+- Lint code ([914a7e2](https://github.com/kiki-kanri/rs-pathkit/commit/914a7e2))
+- Update config and toolchain version ([8e778dd](https://github.com/kiki-kanri/rs-pathkit/commit/8e778dd))
+- Update toolchain version ([919df37](https://github.com/kiki-kanri/rs-pathkit/commit/919df37))
+- Upgrade deps ([f03114c](https://github.com/kiki-kanri/rs-pathkit/commit/f03114c))
+
+#### ⚠️ Breaking Changes
+
+- **fs:** ⚠️  Add async symlink metadata inspection ([eba6733](https://github.com/kiki-kanri/rs-pathkit/commit/eba6733))
+- **fs:** ⚠️  Add async canonicalization and rename sync API ([843b8b7](https://github.com/kiki-kanri/rs-pathkit/commit/843b8b7))
+- **fs:** ⚠️  Add async link and touch operations ([4529396](https://github.com/kiki-kanri/rs-pathkit/commit/4529396))
+- **fs:** ⚠️  Add atomic writes and file persistence ([62af034](https://github.com/kiki-kanri/rs-pathkit/commit/62af034))
+- **path:** ⚠️  Remove implicit string conversions ([60c5aa7](https://github.com/kiki-kanri/rs-pathkit/commit/60c5aa7))
+- **fs:** ⚠️  Expose typed I/O and JSON errors ([f0b64a4](https://github.com/kiki-kanri/rs-pathkit/commit/f0b64a4))
+
+### ❤️ Contributors
+
+- Kiki-kanri
+
 ## v2.0.0
 
 [compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v1.6.0...v2.0.0)
