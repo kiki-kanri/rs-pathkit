@@ -70,6 +70,7 @@ use crate::{
 /// - [`Self::empty_dir_sync`] creates a missing directory with its parents or removes
 ///   the entries of an existing directory, keeping the directory itself. Removal is
 ///   incremental and uses the standard library's file and recursive-directory removal rules.
+///   Child symlinks are removed without traversing their targets.
 /// - Directory collection methods return entries in filesystem iteration order, without
 ///   sorting. [`Self::read_dir_names_sync`] converts names to strings with invalid Unicode
 ///   replaced; [`Self::read_dir_paths_sync`] and [`Self::read_dir_entries_sync`] retain
@@ -274,15 +275,26 @@ impl SyncFsOps for Path {
     }
 
     fn empty_dir_sync(&self) -> IoResult<()> {
+        #[cfg(windows)]
+        use std::os::windows::fs::FileTypeExt;
+
         if !self.exists_sync()? {
             return self.create_dir_all_sync();
         }
 
         for entry in fs::read_dir(self)? {
-            let entry_path = entry?.path();
-            if entry_path.is_dir() {
+            let entry = entry?;
+            let entry_path = entry.path();
+            let file_type = entry.file_type()?;
+            if file_type.is_dir() {
                 fs::remove_dir_all(entry_path)?;
             } else {
+                #[cfg(windows)]
+                if file_type.is_symlink_dir() {
+                    fs::remove_dir(entry_path)?;
+                    continue;
+                }
+
                 fs::remove_file(entry_path)?;
             }
         }

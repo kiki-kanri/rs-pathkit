@@ -545,6 +545,51 @@ async fn test_empty_dir_removes_symlinks_without_removing_targets() -> Result<()
     Ok(())
 }
 
+#[cfg(windows)]
+#[tokio::test]
+async fn test_empty_dir_removes_windows_directory_symlinks() -> Result<()> {
+    use std::{
+        env,
+        os::windows::fs::{
+            symlink_dir,
+            symlink_file,
+        },
+    };
+
+    const ERROR_PRIVILEGE_NOT_HELD: i32 = 1314;
+
+    let directory = tempdir()?;
+    let external = tempdir()?;
+    let target_file = path!(&external) / "keep.txt";
+    let target_dir = path!(&external) / "keep-dir";
+    let nested_file = &target_dir / "keep.txt";
+    async_fs::write(&target_file, b"preserved").await?;
+    async_fs::create_dir(&target_dir).await?;
+    async_fs::write(&nested_file, b"nested content").await?;
+
+    // Symlink creation needs a privilege on Windows: skip locally without it, but require it in CI.
+    match symlink_dir(
+        path!(&external) / "missing-dir",
+        path!(&directory) / "dangling-dir-link",
+    ) {
+        Err(error) if error.raw_os_error() == Some(ERROR_PRIVILEGE_NOT_HELD) && env::var_os("CI").is_none() => {
+            return Ok(());
+        },
+        result => result?,
+    }
+
+    symlink_dir(&target_dir, path!(&directory) / "dir-link")?;
+    symlink_file(&target_file, path!(&directory) / "file-link")?;
+
+    let path = path!(&directory);
+    path.empty_dir().await?;
+
+    assert_eq!(path.read_dir_paths().await?.len(), 0);
+    assert_eq!(async_fs::read(&target_file).await?, b"preserved");
+    assert_eq!(async_fs::read(&nested_file).await?, b"nested content");
+    Ok(())
+}
+
 // Test set_permissions
 #[cfg(unix)]
 #[tokio::test]
