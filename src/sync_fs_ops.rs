@@ -79,8 +79,9 @@ use crate::{
 ///   destination and returns a new [`Path`]; it does not update the source value or fall back
 ///   to copying across filesystems. Replacement rules depend on the platform.
 /// - Link methods use `self` as the source or target and `link` as the new link path.
-///   [`Self::hard_link_sync`] requires filesystem support. Unix-only symbolic-link methods
-///   store the target as supplied and return the stored target without resolving it.
+///   [`Self::hard_link_sync`] requires filesystem support. [`Self::read_link_sync`]
+///   returns the stored target without resolving it. The Unix-only `soft_link_sync`
+///   method stores the target as supplied.
 ///
 /// Unix-only methods expose permission modes, owner and group IDs, and special-file
 /// checks. For ownership changes, `None` preserves the corresponding owner or group ID.
@@ -195,7 +196,6 @@ pub trait SyncFsOps {
 
     fn read_json_sync<T: DeserializeOwned>(&self) -> JsonResult<T>;
 
-    #[cfg(unix)]
     fn read_link_sync(&self) -> IoResult<Path>;
 
     fn read_sync(&self) -> IoResult<Vec<u8>>;
@@ -389,7 +389,6 @@ impl SyncFsOps for Path {
         from_slice(&self.read_sync().map_err(JsonError::io)?)
     }
 
-    #[cfg(unix)]
     fn read_link_sync(&self) -> IoResult<Path> {
         fs::read_link(self).map(Self::from)
     }

@@ -40,7 +40,7 @@
 //! Path parsing, joining, and ordering follow the standard library's platform-specific
 //! semantics. Unix permission modes, ownership operations, and special-file checks are
 //! available only on Unix. Synchronous hard links are available on supported platforms;
-//! the synchronous symbolic-link helpers are Unix-only. Filesystem permissions, link
+//! synchronous symbolic-link creation is Unix-only. Filesystem permissions, link
 //! behavior, and rename restrictions depend on the operating system and filesystem.
 //!
 //! # Examples
