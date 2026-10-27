@@ -8,6 +8,8 @@ use std::{
     io::Result as IoResult,
 };
 
+use derive_more::From;
+
 use crate::Path;
 
 /// A directory entry with owned [`Path`] access and native file-name and metadata queries.
@@ -18,15 +20,8 @@ use crate::Path;
 ///
 /// On Unix, retaining an entry can keep its directory's file descriptor open even
 /// after the directory iterator is dropped.
-#[derive(Debug)]
+#[derive(Debug, From)]
 pub struct PathEntry(DirEntry);
-
-impl From<DirEntry> for PathEntry {
-    #[inline]
-    fn from(entry: DirEntry) -> Self {
-        Self::new(entry)
-    }
-}
 
 impl PathEntry {
     /// Creates a directory entry by taking ownership of a [`std::fs::DirEntry`].

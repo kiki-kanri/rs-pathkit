@@ -4,7 +4,10 @@
 //! `async-fs-ops` feature, `AsyncFsOps`.
 
 use std::{
-    ffi::OsStr,
+    ffi::{
+        OsStr,
+        OsString,
+    },
     io::Result as IoResult,
     path::{
         Path as StdPath,
@@ -12,6 +15,11 @@ use std::{
     },
 };
 
+use derive_more::{
+    AsRef,
+    From,
+    Into,
+};
 use path_absolutize::Absolutize;
 use serde::{
     Deserialize,
@@ -53,7 +61,9 @@ use serde::{
 ///
 /// - [`crate::SyncFsOps`]
 /// - [`crate::PathEntry`]
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, AsRef, From, Into)]
+#[as_ref(StdPath, OsStr, PathBuf)]
+#[from(&str, String, OsString, PathBuf)]
 #[serde(transparent)]
 pub struct Path(pub(crate) PathBuf);
 

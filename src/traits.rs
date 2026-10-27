@@ -1,9 +1,5 @@
 use std::{
     borrow::Borrow,
-    ffi::{
-        OsStr,
-        OsString,
-    },
     fmt::{
         Display,
         Formatter,
@@ -17,13 +13,6 @@ use std::{
 };
 
 use crate::core::Path;
-
-impl AsRef<StdPath> for Path {
-    #[inline]
-    fn as_ref(&self) -> &StdPath {
-        &self.0
-    }
-}
 
 impl Borrow<StdPath> for Path {
     #[inline]
@@ -55,104 +44,11 @@ impl From<&StdPath> for Path {
     }
 }
 
-impl From<&str> for Path {
+/// An owned copy of a borrowed [`std::path::PathBuf`], preserving native path data.
+impl From<&PathBuf> for Path {
     #[inline]
-    fn from(path: &str) -> Self {
-        Self(PathBuf::from(path))
-    }
-}
-
-impl AsRef<OsStr> for Path {
-    #[inline]
-    fn as_ref(&self) -> &OsStr {
-        self.0.as_os_str()
-    }
-}
-
-/// An owned string-to-path conversion that consumes the string without accessing the filesystem.
-///
-/// # Examples
-///
-/// ```rust
-/// use pathkit::Path;
-///
-/// let path = Path::from(String::from("config.json"));
-/// assert_eq!(path.as_path(), std::path::Path::new("config.json"));
-/// ```
-impl From<String> for Path {
-    #[inline]
-    fn from(path: String) -> Self {
-        Self(PathBuf::from(path))
-    }
-}
-
-/// An owned native-string-to-path conversion that consumes the string without copying
-/// or accessing the filesystem.
-///
-/// # Examples
-///
-/// ```rust
-/// use std::ffi::OsString;
-///
-/// use pathkit::Path;
-///
-/// let path = Path::from(OsString::from("config.json"));
-/// assert_eq!(path.as_path(), std::path::Path::new("config.json"));
-/// ```
-impl From<OsString> for Path {
-    #[inline]
-    fn from(path: OsString) -> Self {
-        Self(PathBuf::from(path))
-    }
-}
-
-/// An owned path conversion that takes the [`std::path::PathBuf`] buffer without copying
-/// or accessing the filesystem.
-///
-/// # Examples
-///
-/// ```rust
-/// use std::path::PathBuf;
-///
-/// use pathkit::Path;
-///
-/// let path = Path::from(PathBuf::from("config.json"));
-/// assert_eq!(path.as_path(), std::path::Path::new("config.json"));
-/// ```
-impl From<PathBuf> for Path {
-    #[inline]
-    fn from(path: PathBuf) -> Self {
-        Self(path)
-    }
-}
-
-/// A borrowed [`std::path::PathBuf`] view without copying or converting native path data.
-///
-/// The view borrows the original path. It does not consume the path or allow mutation
-/// of the underlying buffer.
-///
-/// # Examples
-///
-/// ```rust
-/// use std::path::PathBuf;
-///
-/// use pathkit::path;
-///
-/// let path = path!("config.json");
-/// let buffer: &PathBuf = path.as_ref();
-/// assert_eq!(buffer, &PathBuf::from("config.json"));
-/// ```
-impl AsRef<PathBuf> for Path {
-    #[inline]
-    fn as_ref(&self) -> &PathBuf {
-        &self.0
-    }
-}
-
-impl From<Path> for PathBuf {
-    #[inline]
-    fn from(path: Path) -> Self {
-        path.0
+    fn from(path: &PathBuf) -> Self {
+        Self::from(path.as_path())
     }
 }
 
@@ -211,6 +107,7 @@ mod tests {
         assert_eq!(Path::from("/test/path").as_path(), std_path);
         assert_eq!(Path::from(String::from("/test/path")).as_path(), std_path);
         assert_eq!(Path::from(OsString::from("/test/path")).as_path(), std_path);
+        assert_eq!(Path::from(&expected).as_path(), std_path);
         assert_eq!(Path::from(expected.clone()).as_path(), std_path);
         assert_eq!(PathBuf::from(crate::path!("/test/path")), expected);
     }

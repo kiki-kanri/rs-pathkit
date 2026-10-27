@@ -7,6 +7,7 @@ use std::{
     io::Result as IoResult,
 };
 
+use derive_more::From;
 use tokio::fs::DirEntry;
 
 use crate::Path;
@@ -19,15 +20,8 @@ use crate::Path;
 ///
 /// Available with the `async-fs-ops` feature. Metadata and file-type I/O requires a
 /// Tokio runtime with blocking-task support when the underlying query submits work.
-#[derive(Debug)]
+#[derive(Debug, From)]
 pub struct AsyncPathEntry(DirEntry);
-
-impl From<DirEntry> for AsyncPathEntry {
-    #[inline]
-    fn from(entry: DirEntry) -> Self {
-        Self::new(entry)
-    }
-}
 
 impl AsyncPathEntry {
     /// Creates a directory entry by taking ownership of a [`tokio::fs::DirEntry`].
