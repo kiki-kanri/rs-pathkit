@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.1.0
+
+[compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v3.0.0...v3.1.0)
+
+### 🚀 Enhancements
+
+- Support borrowed PathBuf conversion and simplify trait implementations ([d5845e5](https://github.com/kiki-kanri/rs-pathkit/commit/d5845e5))
+
+### ❤️ Contributors
+
+- Kiki-kanri
+
 ## v3.0.0
 
 [compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v2.0.0...v3.0.0)
