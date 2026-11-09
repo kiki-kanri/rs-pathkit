@@ -1,9 +1,9 @@
 use std::{
     borrow::Borrow,
+    fmt,
     fmt::{
         Display,
         Formatter,
-        Result as FmtResult,
     },
     ops::Deref,
     path::{
@@ -32,7 +32,7 @@ impl Deref for Path {
 
 impl Display for Path {
     #[inline]
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_string_lossy())
     }
 }

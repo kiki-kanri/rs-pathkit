@@ -35,6 +35,7 @@
 //! - [`sea_orm::sea_query::ValueType`]
 //! - [`sea_orm::TryGetable`]
 
+use anyhow::Result;
 use sea_orm::{
     ColIdx,
     QueryResult,

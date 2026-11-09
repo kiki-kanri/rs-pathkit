@@ -1,13 +1,12 @@
 use std::{
     fs,
+    io,
     io::{
-        Error as IoError,
-        ErrorKind as IoErrorKind,
         Read,
         Write,
     },
     sync::Barrier,
-    thread::scope,
+    thread,
 };
 
 use anyhow::{
@@ -23,7 +22,6 @@ use serde::{
     Deserialize,
     Serialize,
 };
-use serde_json::Value;
 use tempfile::{
     NamedTempFile,
     tempdir,
@@ -304,11 +302,11 @@ fn test_write_atomic_with_sync_removes_temporary_file_on_failure() -> Result<()>
     path.write_sync(b"old")?;
 
     let error = path
-        .write_atomic_with_sync(b"new", |_| Err(IoError::other("prepare failed")))
+        .write_atomic_with_sync(b"new", |_| Err(io::Error::other("prepare failed")))
         .err()
         .ok_or_else(|| anyhow!("expected prepare error"))?;
 
-    assert_eq!(error.kind(), IoErrorKind::Other);
+    assert_eq!(error.kind(), io::ErrorKind::Other);
     assert_eq!(path.read_sync()?, b"old");
     assert_eq!(path!(&temp_dir).read_dir_names_sync()?, ["config.json"]);
     Ok(())
@@ -352,7 +350,7 @@ fn test_write_atomic_sync_rejects_path_without_file_name() -> Result<()> {
         .err()
         .ok_or_else(|| anyhow!("expected missing file name error"))?;
 
-    assert_eq!(error.kind(), IoErrorKind::InvalidInput);
+    assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
     Ok(())
 }
 
@@ -403,12 +401,12 @@ fn test_read_json_sync_missing_file_returns_io_error() -> Result<()> {
     let missing = path!(&temp_dir) / "missing.json";
 
     let error = missing
-        .read_json_sync::<Value>()
+        .read_json_sync::<serde_json::Value>()
         .err()
         .ok_or_else(|| anyhow!("expected missing file error"))?;
 
     assert!(error.is_io());
-    assert_eq!(error.io_error_kind(), Some(IoErrorKind::NotFound));
+    assert_eq!(error.io_error_kind(), Some(io::ErrorKind::NotFound));
     Ok(())
 }
 
@@ -419,7 +417,7 @@ fn test_read_json_sync_invalid_json_returns_syntax_error() -> Result<()> {
     file_path.write_sync(b"not json")?;
 
     let error = file_path
-        .read_json_sync::<Value>()
+        .read_json_sync::<serde_json::Value>()
         .err()
         .ok_or_else(|| anyhow!("expected invalid JSON error"))?;
 
@@ -439,7 +437,7 @@ fn test_write_json_sync_missing_parent_returns_io_error() -> Result<()> {
         .ok_or_else(|| anyhow!("expected missing parent error"))?;
 
     assert!(error.is_io());
-    assert_eq!(error.io_error_kind(), Some(IoErrorKind::NotFound));
+    assert_eq!(error.io_error_kind(), Some(io::ErrorKind::NotFound));
     Ok(())
 }
 
@@ -644,18 +642,16 @@ fn test_is_char_device_sync() -> Result<()> {
 fn test_is_fifo_sync() -> Result<()> {
     use std::{
         ffi::CString,
-        io::Error as IoError,
+        io,
         os::unix::ffi::OsStrExt,
     };
-
-    use libc::mkfifo;
 
     let temp_dir = tempdir()?;
     let fifo = path!(&temp_dir) / "fifo";
     let fifo_path = CString::new(fifo.as_os_str().as_bytes())?;
     // SAFETY: `fifo_path` is a valid NUL-terminated string that outlives the call.
-    if unsafe { mkfifo(fifo_path.as_ptr(), 0o600) } != 0 {
-        return Err(IoError::last_os_error().into());
+    if unsafe { libc::mkfifo(fifo_path.as_ptr(), 0o600) } != 0 {
+        return Err(io::Error::last_os_error().into());
     }
 
     assert!(fifo.is_fifo_sync()?);
@@ -804,7 +800,7 @@ fn test_touch_sync_preserves_concurrently_written_content() -> Result<()> {
         let file = path!(&directory) / format!("touch-{index}.txt");
         let barrier = Barrier::new(5);
 
-        scope(|scope| -> Result<()> {
+        thread::scope(|scope| -> Result<()> {
             let handles: Vec<_> = (0..4)
                 .map(|_| {
                     scope.spawn(|| {

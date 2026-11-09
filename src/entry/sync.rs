@@ -5,7 +5,7 @@ use std::{
         FileType,
         Metadata,
     },
-    io::Result as IoResult,
+    io,
 };
 
 use derive_more::From;
@@ -59,7 +59,7 @@ impl PathEntry {
     ///
     /// Propagates filesystem errors if the underlying query requires I/O and fails, such
     /// as when the entry is removed or permissions prevent reading its metadata.
-    pub fn metadata(&self) -> IoResult<Metadata> {
+    pub fn metadata(&self) -> io::Result<Metadata> {
         self.0.metadata()
     }
 
@@ -71,7 +71,7 @@ impl PathEntry {
     ///
     /// Propagates filesystem errors if the underlying query requires I/O and fails, such
     /// as when the entry is removed or permissions prevent reading its metadata.
-    pub fn file_type(&self) -> IoResult<FileType> {
+    pub fn file_type(&self) -> io::Result<FileType> {
         self.0.file_type()
     }
 

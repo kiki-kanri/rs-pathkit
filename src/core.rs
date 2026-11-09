@@ -8,7 +8,7 @@ use std::{
         OsStr,
         OsString,
     },
-    io::Result as IoResult,
+    io,
     path::{
         Path as StdPath,
         PathBuf,
@@ -109,7 +109,7 @@ impl Path {
     /// assert_eq!(path, path!("relative/file.txt"));
     /// # Ok::<(), std::io::Error>(())
     /// ```
-    pub fn absolutize(&self) -> IoResult<Self> {
+    pub fn absolutize(&self) -> io::Result<Self> {
         Ok(Self(self.0.absolutize()?.into_owned()))
     }
 
@@ -162,7 +162,7 @@ impl Path {
     /// assert_eq!(resolved, path!(root.join("config.json")));
     /// # Ok::<(), std::io::Error>(())
     /// ```
-    pub fn absolutize_virtually(&self, virtual_root: impl AsRef<StdPath>) -> IoResult<Self> {
+    pub fn absolutize_virtually(&self, virtual_root: impl AsRef<StdPath>) -> io::Result<Self> {
         Ok(Self(self.0.absolutize_virtually(virtual_root)?.into_owned()))
     }
 

@@ -11,12 +11,8 @@ use std::{
         Permissions,
         ReadDir,
     },
-    io::{
-        Error as IoError,
-        ErrorKind as IoErrorKind,
-        Result as IoResult,
-        Write,
-    },
+    io,
+    io::Write,
     path::Path as StdPath,
     process,
     sync::atomic::{
@@ -36,12 +32,6 @@ use filetime::{
 use serde::{
     Serialize,
     de::DeserializeOwned,
-};
-use serde_json::{
-    Error as JsonError,
-    Result as JsonResult,
-    from_slice,
-    to_vec_pretty,
 };
 
 use crate::{
@@ -159,140 +149,140 @@ pub trait SyncFsOps {
     /// assert!(canonical.is_absolute());
     /// # Ok::<(), std::io::Error>(())
     /// ```
-    fn canonicalize_sync(&self) -> IoResult<Path>;
+    fn canonicalize_sync(&self) -> io::Result<Path>;
 
     #[cfg(unix)]
-    fn chmod_sync(&self, mode: u32) -> IoResult<()>;
+    fn chmod_sync(&self, mode: u32) -> io::Result<()>;
 
     #[cfg(unix)]
-    fn chown_sync(&self, uid: Option<u32>, gid: Option<u32>) -> IoResult<()>;
+    fn chown_sync(&self, uid: Option<u32>, gid: Option<u32>) -> io::Result<()>;
 
-    fn copy_file_sync(&self, dest: impl AsRef<StdPath>) -> IoResult<u64>;
+    fn copy_file_sync(&self, dest: impl AsRef<StdPath>) -> io::Result<u64>;
 
-    fn create_dir_all_sync(&self) -> IoResult<()>;
+    fn create_dir_all_sync(&self) -> io::Result<()>;
 
-    fn create_dir_sync(&self) -> IoResult<()>;
+    fn create_dir_sync(&self) -> io::Result<()>;
 
-    fn create_parent_dir_all_sync(&self) -> IoResult<bool>;
+    fn create_parent_dir_all_sync(&self) -> io::Result<bool>;
 
-    fn create_parent_dir_sync(&self) -> IoResult<bool>;
+    fn create_parent_dir_sync(&self) -> io::Result<bool>;
 
-    fn empty_dir_sync(&self) -> IoResult<()>;
+    fn empty_dir_sync(&self) -> io::Result<()>;
 
-    fn exists_sync(&self) -> IoResult<bool>;
+    fn exists_sync(&self) -> io::Result<bool>;
 
-    fn get_file_size_sync(&self) -> IoResult<u64>;
+    fn get_file_size_sync(&self) -> io::Result<u64>;
 
-    fn hard_link_sync(&self, link: impl AsRef<StdPath>) -> IoResult<()>;
-
-    #[cfg(unix)]
-    fn is_block_device_sync(&self) -> IoResult<bool>;
+    fn hard_link_sync(&self, link: impl AsRef<StdPath>) -> io::Result<()>;
 
     #[cfg(unix)]
-    fn is_char_device_sync(&self) -> IoResult<bool>;
-
-    fn is_dir_sync(&self) -> IoResult<bool>;
+    fn is_block_device_sync(&self) -> io::Result<bool>;
 
     #[cfg(unix)]
-    fn is_fifo_sync(&self) -> IoResult<bool>;
+    fn is_char_device_sync(&self) -> io::Result<bool>;
 
-    fn is_file_sync(&self) -> IoResult<bool>;
+    fn is_dir_sync(&self) -> io::Result<bool>;
 
     #[cfg(unix)]
-    fn is_socket_sync(&self) -> IoResult<bool>;
+    fn is_fifo_sync(&self) -> io::Result<bool>;
 
-    fn is_symlink_sync(&self) -> IoResult<bool>;
+    fn is_file_sync(&self) -> io::Result<bool>;
 
-    fn metadata_sync(&self) -> IoResult<Metadata>;
+    #[cfg(unix)]
+    fn is_socket_sync(&self) -> io::Result<bool>;
 
-    fn open_sync(&self) -> IoResult<File>;
+    fn is_symlink_sync(&self) -> io::Result<bool>;
 
-    fn open_with_options_sync(&self, options: &OpenOptions) -> IoResult<File>;
+    fn metadata_sync(&self) -> io::Result<Metadata>;
 
-    fn persist_to_sync(&self, dest: impl AsRef<StdPath>) -> IoResult<Path>;
+    fn open_sync(&self) -> io::Result<File>;
 
-    fn read_dir_entries_sync(&self) -> IoResult<Vec<PathEntry>>;
+    fn open_with_options_sync(&self, options: &OpenOptions) -> io::Result<File>;
 
-    fn read_dir_names_sync(&self) -> IoResult<Vec<String>>;
+    fn persist_to_sync(&self, dest: impl AsRef<StdPath>) -> io::Result<Path>;
 
-    fn read_dir_paths_sync(&self) -> IoResult<Vec<Path>>;
+    fn read_dir_entries_sync(&self) -> io::Result<Vec<PathEntry>>;
 
-    fn read_dir_sync(&self) -> IoResult<ReadDir>;
+    fn read_dir_names_sync(&self) -> io::Result<Vec<String>>;
 
-    fn read_json_sync<T: DeserializeOwned>(&self) -> JsonResult<T>;
+    fn read_dir_paths_sync(&self) -> io::Result<Vec<Path>>;
 
-    fn read_link_sync(&self) -> IoResult<Path>;
+    fn read_dir_sync(&self) -> io::Result<ReadDir>;
 
-    fn read_sync(&self) -> IoResult<Vec<u8>>;
+    fn read_json_sync<T: DeserializeOwned>(&self) -> serde_json::Result<T>;
 
-    fn read_to_string_sync(&self) -> IoResult<String>;
+    fn read_link_sync(&self) -> io::Result<Path>;
 
-    fn remove_dir_all_sync(&self) -> IoResult<()>;
+    fn read_sync(&self) -> io::Result<Vec<u8>>;
 
-    fn remove_dir_sync(&self) -> IoResult<()>;
+    fn read_to_string_sync(&self) -> io::Result<String>;
 
-    fn remove_file_sync(&self) -> IoResult<()>;
+    fn remove_dir_all_sync(&self) -> io::Result<()>;
 
-    fn rename_to_sync(&self, dest: impl AsRef<StdPath>) -> IoResult<Path>;
+    fn remove_dir_sync(&self) -> io::Result<()>;
 
-    fn set_permissions_sync(&self, permissions: Permissions) -> IoResult<()>;
+    fn remove_file_sync(&self) -> io::Result<()>;
+
+    fn rename_to_sync(&self, dest: impl AsRef<StdPath>) -> io::Result<Path>;
+
+    fn set_permissions_sync(&self, permissions: Permissions) -> io::Result<()>;
 
     // TODO: Add Windows `symlink_file` and `symlink_dir` variants; Windows requires the link type
     // to be chosen explicitly instead of inferred from the target.
     #[cfg(unix)]
-    fn soft_link_sync(&self, link: impl AsRef<StdPath>) -> IoResult<()>;
+    fn soft_link_sync(&self, link: impl AsRef<StdPath>) -> io::Result<()>;
 
-    fn symlink_metadata_sync(&self) -> IoResult<Metadata>;
+    fn symlink_metadata_sync(&self) -> io::Result<Metadata>;
 
-    fn touch_sync(&self) -> IoResult<()>;
+    fn touch_sync(&self) -> io::Result<()>;
 
-    fn truncate_sync(&self, len: Option<u64>) -> IoResult<()>;
+    fn truncate_sync(&self, len: Option<u64>) -> io::Result<()>;
 
-    fn write_atomic_sync(&self, contents: impl AsRef<[u8]>) -> IoResult<()>;
+    fn write_atomic_sync(&self, contents: impl AsRef<[u8]>) -> io::Result<()>;
 
     fn write_atomic_with_sync(
         &self,
         contents: impl AsRef<[u8]>,
-        prepare: impl FnOnce(&Path) -> IoResult<()>,
-    ) -> IoResult<()>;
+        prepare: impl FnOnce(&Path) -> io::Result<()>,
+    ) -> io::Result<()>;
 
-    fn write_json_sync<T: Serialize>(&self, data: T) -> JsonResult<()>;
+    fn write_json_sync<T: Serialize>(&self, data: T) -> serde_json::Result<()>;
 
-    fn write_sync(&self, contents: impl AsRef<[u8]>) -> IoResult<()>;
+    fn write_sync(&self, contents: impl AsRef<[u8]>) -> io::Result<()>;
 }
 
 impl SyncFsOps for Path {
-    fn canonicalize_sync(&self) -> IoResult<Path> {
+    fn canonicalize_sync(&self) -> io::Result<Path> {
         fs::canonicalize(self).map(Self::from)
     }
 
     #[cfg(unix)]
-    fn chmod_sync(&self, mode: u32) -> IoResult<()> {
+    fn chmod_sync(&self, mode: u32) -> io::Result<()> {
         use std::os::unix::fs::PermissionsExt;
 
         fs::set_permissions(self, Permissions::from_mode(mode))
     }
 
     #[cfg(unix)]
-    fn chown_sync(&self, uid: Option<u32>, gid: Option<u32>) -> IoResult<()> {
+    fn chown_sync(&self, uid: Option<u32>, gid: Option<u32>) -> io::Result<()> {
         use std::os::unix::fs::chown;
 
         chown(self, uid, gid)
     }
 
-    fn copy_file_sync(&self, dest: impl AsRef<StdPath>) -> IoResult<u64> {
+    fn copy_file_sync(&self, dest: impl AsRef<StdPath>) -> io::Result<u64> {
         fs::copy(self, dest)
     }
 
-    fn create_dir_all_sync(&self) -> IoResult<()> {
+    fn create_dir_all_sync(&self) -> io::Result<()> {
         fs::create_dir_all(self)
     }
 
-    fn create_dir_sync(&self) -> IoResult<()> {
+    fn create_dir_sync(&self) -> io::Result<()> {
         fs::create_dir(self)
     }
 
-    fn create_parent_dir_all_sync(&self) -> IoResult<bool> {
+    fn create_parent_dir_all_sync(&self) -> io::Result<bool> {
         if let Some(parent) = self.parent() {
             parent.create_dir_all_sync()?;
             return Ok(true);
@@ -301,7 +291,7 @@ impl SyncFsOps for Path {
         Ok(false)
     }
 
-    fn create_parent_dir_sync(&self) -> IoResult<bool> {
+    fn create_parent_dir_sync(&self) -> io::Result<bool> {
         if let Some(parent) = self.parent() {
             parent.create_dir_sync()?;
             return Ok(true);
@@ -310,7 +300,7 @@ impl SyncFsOps for Path {
         Ok(false)
     }
 
-    fn empty_dir_sync(&self) -> IoResult<()> {
+    fn empty_dir_sync(&self) -> io::Result<()> {
         #[cfg(windows)]
         use std::os::windows::fs::FileTypeExt;
 
@@ -338,77 +328,77 @@ impl SyncFsOps for Path {
         Ok(())
     }
 
-    fn exists_sync(&self) -> IoResult<bool> {
+    fn exists_sync(&self) -> io::Result<bool> {
         self.try_exists()
     }
 
-    fn get_file_size_sync(&self) -> IoResult<u64> {
+    fn get_file_size_sync(&self) -> io::Result<u64> {
         Ok(self.metadata_sync()?.len())
     }
 
-    fn hard_link_sync(&self, link: impl AsRef<StdPath>) -> IoResult<()> {
+    fn hard_link_sync(&self, link: impl AsRef<StdPath>) -> io::Result<()> {
         fs::hard_link(self, link)
     }
 
     #[cfg(unix)]
-    fn is_block_device_sync(&self) -> IoResult<bool> {
+    fn is_block_device_sync(&self) -> io::Result<bool> {
         use std::os::unix::fs::FileTypeExt;
 
         Ok(self.metadata_sync()?.file_type().is_block_device())
     }
 
     #[cfg(unix)]
-    fn is_char_device_sync(&self) -> IoResult<bool> {
+    fn is_char_device_sync(&self) -> io::Result<bool> {
         use std::os::unix::fs::FileTypeExt;
 
         Ok(self.metadata_sync()?.file_type().is_char_device())
     }
 
-    fn is_dir_sync(&self) -> IoResult<bool> {
+    fn is_dir_sync(&self) -> io::Result<bool> {
         Ok(self.metadata_sync()?.is_dir())
     }
 
     #[cfg(unix)]
-    fn is_fifo_sync(&self) -> IoResult<bool> {
+    fn is_fifo_sync(&self) -> io::Result<bool> {
         use std::os::unix::fs::FileTypeExt;
 
         Ok(self.metadata_sync()?.file_type().is_fifo())
     }
 
-    fn is_file_sync(&self) -> IoResult<bool> {
+    fn is_file_sync(&self) -> io::Result<bool> {
         Ok(self.metadata_sync()?.is_file())
     }
 
     #[cfg(unix)]
-    fn is_socket_sync(&self) -> IoResult<bool> {
+    fn is_socket_sync(&self) -> io::Result<bool> {
         use std::os::unix::fs::FileTypeExt;
 
         Ok(self.metadata_sync()?.file_type().is_socket())
     }
 
-    fn is_symlink_sync(&self) -> IoResult<bool> {
+    fn is_symlink_sync(&self) -> io::Result<bool> {
         Ok(self.symlink_metadata_sync()?.file_type().is_symlink())
     }
 
-    fn metadata_sync(&self) -> IoResult<Metadata> {
+    fn metadata_sync(&self) -> io::Result<Metadata> {
         fs::metadata(self)
     }
 
-    fn open_sync(&self) -> IoResult<File> {
+    fn open_sync(&self) -> io::Result<File> {
         File::open(self)
     }
 
-    fn open_with_options_sync(&self, options: &OpenOptions) -> IoResult<File> {
+    fn open_with_options_sync(&self, options: &OpenOptions) -> io::Result<File> {
         options.open(self)
     }
 
-    fn persist_to_sync(&self, dest: impl AsRef<StdPath>) -> IoResult<Path> {
+    fn persist_to_sync(&self, dest: impl AsRef<StdPath>) -> io::Result<Path> {
         sync_file(self)?;
         replace_durably(self, dest.as_ref())?;
         Ok(Self::new(dest))
     }
 
-    fn read_dir_entries_sync(&self) -> IoResult<Vec<PathEntry>> {
+    fn read_dir_entries_sync(&self) -> io::Result<Vec<PathEntry>> {
         let mut entries = Vec::new();
         for entry in fs::read_dir(self)? {
             entries.push(PathEntry::new(entry?));
@@ -417,7 +407,7 @@ impl SyncFsOps for Path {
         Ok(entries)
     }
 
-    fn read_dir_names_sync(&self) -> IoResult<Vec<String>> {
+    fn read_dir_names_sync(&self) -> io::Result<Vec<String>> {
         let mut names = Vec::new();
         for entry in fs::read_dir(self)? {
             names.push(entry?.file_name().to_string_lossy().into());
@@ -426,7 +416,7 @@ impl SyncFsOps for Path {
         Ok(names)
     }
 
-    fn read_dir_paths_sync(&self) -> IoResult<Vec<Path>> {
+    fn read_dir_paths_sync(&self) -> io::Result<Vec<Path>> {
         let mut paths = Vec::new();
         for entry in fs::read_dir(self)? {
             paths.push(Self::from(entry?.path()));
@@ -435,59 +425,59 @@ impl SyncFsOps for Path {
         Ok(paths)
     }
 
-    fn read_dir_sync(&self) -> IoResult<ReadDir> {
+    fn read_dir_sync(&self) -> io::Result<ReadDir> {
         fs::read_dir(self)
     }
 
-    fn read_json_sync<T: DeserializeOwned>(&self) -> JsonResult<T> {
-        from_slice(&self.read_sync().map_err(JsonError::io)?)
+    fn read_json_sync<T: DeserializeOwned>(&self) -> serde_json::Result<T> {
+        serde_json::from_slice(&self.read_sync().map_err(serde_json::Error::io)?)
     }
 
-    fn read_link_sync(&self) -> IoResult<Path> {
+    fn read_link_sync(&self) -> io::Result<Path> {
         fs::read_link(self).map(Self::from)
     }
 
-    fn read_sync(&self) -> IoResult<Vec<u8>> {
+    fn read_sync(&self) -> io::Result<Vec<u8>> {
         fs::read(self)
     }
 
-    fn read_to_string_sync(&self) -> IoResult<String> {
+    fn read_to_string_sync(&self) -> io::Result<String> {
         fs::read_to_string(self)
     }
 
-    fn remove_dir_all_sync(&self) -> IoResult<()> {
+    fn remove_dir_all_sync(&self) -> io::Result<()> {
         fs::remove_dir_all(self)
     }
 
-    fn remove_dir_sync(&self) -> IoResult<()> {
+    fn remove_dir_sync(&self) -> io::Result<()> {
         fs::remove_dir(self)
     }
 
-    fn remove_file_sync(&self) -> IoResult<()> {
+    fn remove_file_sync(&self) -> io::Result<()> {
         fs::remove_file(self)
     }
 
-    fn rename_to_sync(&self, dest: impl AsRef<StdPath>) -> IoResult<Path> {
+    fn rename_to_sync(&self, dest: impl AsRef<StdPath>) -> io::Result<Path> {
         fs::rename(self, &dest)?;
         Ok(Self::new(dest))
     }
 
-    fn set_permissions_sync(&self, permissions: Permissions) -> IoResult<()> {
+    fn set_permissions_sync(&self, permissions: Permissions) -> io::Result<()> {
         fs::set_permissions(self, permissions)
     }
 
     #[cfg(unix)]
-    fn soft_link_sync(&self, link: impl AsRef<StdPath>) -> IoResult<()> {
+    fn soft_link_sync(&self, link: impl AsRef<StdPath>) -> io::Result<()> {
         use std::os::unix::fs::symlink;
 
         symlink(self, link)
     }
 
-    fn symlink_metadata_sync(&self) -> IoResult<Metadata> {
+    fn symlink_metadata_sync(&self) -> io::Result<Metadata> {
         fs::symlink_metadata(self)
     }
 
-    fn touch_sync(&self) -> IoResult<()> {
+    fn touch_sync(&self) -> io::Result<()> {
         if !self.exists_sync()? {
             OpenOptions::new().write(true).create(true).truncate(false).open(self)?;
         }
@@ -495,19 +485,19 @@ impl SyncFsOps for Path {
         set_file_mtime(self, FileTime::now())
     }
 
-    fn truncate_sync(&self, len: Option<u64>) -> IoResult<()> {
+    fn truncate_sync(&self, len: Option<u64>) -> io::Result<()> {
         OpenOptions::new().write(true).open(self)?.set_len(len.unwrap_or(0))
     }
 
-    fn write_atomic_sync(&self, contents: impl AsRef<[u8]>) -> IoResult<()> {
+    fn write_atomic_sync(&self, contents: impl AsRef<[u8]>) -> io::Result<()> {
         self.write_atomic_with_sync(contents, |_| Ok(()))
     }
 
     fn write_atomic_with_sync(
         &self,
         contents: impl AsRef<[u8]>,
-        prepare: impl FnOnce(&Path) -> IoResult<()>,
-    ) -> IoResult<()> {
+        prepare: impl FnOnce(&Path) -> io::Result<()>,
+    ) -> io::Result<()> {
         let (temp_path, file) = create_temp_sibling(self)?;
         let mut cleanup = RemoveOnDrop(Some(&temp_path));
         write_and_replace(file, &temp_path, self, contents.as_ref(), prepare)?;
@@ -515,11 +505,12 @@ impl SyncFsOps for Path {
         Ok(())
     }
 
-    fn write_json_sync<T: Serialize>(&self, data: T) -> JsonResult<()> {
-        self.write_sync(to_vec_pretty(&data)?).map_err(JsonError::io)
+    fn write_json_sync<T: Serialize>(&self, data: T) -> serde_json::Result<()> {
+        self.write_sync(serde_json::to_vec_pretty(&data)?)
+            .map_err(serde_json::Error::io)
     }
 
-    fn write_sync(&self, contents: impl AsRef<[u8]>) -> IoResult<()> {
+    fn write_sync(&self, contents: impl AsRef<[u8]>) -> io::Result<()> {
         fs::write(self, contents)
     }
 }
@@ -542,13 +533,13 @@ impl Drop for RemoveOnDrop<'_> {
 }
 
 // Functions
-fn create_temp_sibling(path: &Path) -> IoResult<(Path, File)> {
+fn create_temp_sibling(path: &Path) -> io::Result<(Path, File)> {
     #[cfg(unix)]
     use std::os::unix::fs::OpenOptionsExt;
 
     if path.file_name().is_none() {
-        return Err(IoError::new(
-            IoErrorKind::InvalidInput,
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
             "atomic write path has no file name",
         ));
     }
@@ -569,13 +560,13 @@ fn create_temp_sibling(path: &Path) -> IoResult<(Path, File)> {
         let temp_path = Path::from(parent.join(format!(".pathkit-{:x}-{nanos:x}-{counter:x}.tmp", process::id())));
         match options.open(&temp_path) {
             Ok(file) => return Ok((temp_path, file)),
-            Err(error) if error.kind() == IoErrorKind::AlreadyExists => {},
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {},
             Err(error) => return Err(error),
         }
     }
 
-    Err(IoError::new(
-        IoErrorKind::AlreadyExists,
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
         "failed to create a unique temporary file for atomic write",
     ))
 }
@@ -587,7 +578,7 @@ fn parent_or_current_dir(path: &StdPath) -> &StdPath {
 }
 
 #[cfg(not(windows))]
-fn replace_durably(source: &StdPath, dest: &StdPath) -> IoResult<()> {
+fn replace_durably(source: &StdPath, dest: &StdPath) -> io::Result<()> {
     fs::rename(source, dest)?;
 
     #[cfg(unix)]
@@ -596,7 +587,7 @@ fn replace_durably(source: &StdPath, dest: &StdPath) -> IoResult<()> {
 }
 
 #[cfg(windows)]
-fn replace_durably(source: &StdPath, dest: &StdPath) -> IoResult<()> {
+fn replace_durably(source: &StdPath, dest: &StdPath) -> io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
 
     use windows_sys::Win32::Storage::FileSystem::{
@@ -605,10 +596,13 @@ fn replace_durably(source: &StdPath, dest: &StdPath) -> IoResult<()> {
         MoveFileExW,
     };
 
-    fn wide_path(path: &StdPath) -> IoResult<Vec<u16>> {
+    fn wide_path(path: &StdPath) -> io::Result<Vec<u16>> {
         let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
         if wide.contains(&0) {
-            return Err(IoError::new(IoErrorKind::InvalidInput, "path contains a NUL character"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "path contains a NUL character",
+            ));
         }
 
         wide.push(0);
@@ -628,7 +622,7 @@ fn replace_durably(source: &StdPath, dest: &StdPath) -> IoResult<()> {
     };
 
     if replaced == 0 {
-        return Err(IoError::last_os_error());
+        return Err(io::Error::last_os_error());
     }
 
     Ok(())
@@ -636,7 +630,7 @@ fn replace_durably(source: &StdPath, dest: &StdPath) -> IoResult<()> {
 
 // TODO: On macOS, `sync_all` uses `F_FULLFSYNC`, which some filesystems (SMB, VirtioFS, some FUSE)
 // reject; fall back to `fsync` for those errors here and in `write_and_replace` and `replace_durably`.
-fn sync_file(path: &StdPath) -> IoResult<()> {
+fn sync_file(path: &StdPath) -> io::Result<()> {
     // Windows requires write access to flush file buffers.
     #[cfg(windows)]
     let file = OpenOptions::new().write(true).open(path)?;
@@ -651,8 +645,8 @@ fn write_and_replace(
     temp_path: &Path,
     dest: &Path,
     contents: &[u8],
-    prepare: impl FnOnce(&Path) -> IoResult<()>,
-) -> IoResult<()> {
+    prepare: impl FnOnce(&Path) -> io::Result<()>,
+) -> io::Result<()> {
     prepare(temp_path)?;
     file.write_all(contents)?;
     file.sync_all()?;

@@ -1,6 +1,6 @@
 #![cfg(feature = "async-fs-ops")]
 
-use std::io::ErrorKind as IoErrorKind;
+use std::io;
 
 use anyhow::{
     Result,
@@ -17,7 +17,6 @@ use serde::{
     Deserialize,
     Serialize,
 };
-use serde_json::Value;
 use tempfile::{
     NamedTempFile,
     tempdir,
@@ -148,7 +147,7 @@ async fn test_symlink_metadata_for_missing_path() -> Result<()> {
         .err()
         .ok_or_else(|| anyhow!("expected missing path error"))?;
 
-    assert_eq!(error.kind(), IoErrorKind::NotFound);
+    assert_eq!(error.kind(), io::ErrorKind::NotFound);
     Ok(())
 }
 
@@ -374,13 +373,13 @@ async fn test_read_json_missing_file_returns_io_error() -> Result<()> {
     let missing = path!(&temp_dir) / "missing.json";
 
     let error = missing
-        .read_json::<Value>()
+        .read_json::<serde_json::Value>()
         .await
         .err()
         .ok_or_else(|| anyhow!("expected missing file error"))?;
 
     assert!(error.is_io());
-    assert_eq!(error.io_error_kind(), Some(IoErrorKind::NotFound));
+    assert_eq!(error.io_error_kind(), Some(io::ErrorKind::NotFound));
     Ok(())
 }
 
@@ -391,7 +390,7 @@ async fn test_read_json_invalid_json_returns_syntax_error() -> Result<()> {
     file_path.write(b"not json").await?;
 
     let error = file_path
-        .read_json::<Value>()
+        .read_json::<serde_json::Value>()
         .await
         .err()
         .ok_or_else(|| anyhow!("expected invalid JSON error"))?;
@@ -413,7 +412,7 @@ async fn test_write_json_missing_parent_returns_io_error() -> Result<()> {
         .ok_or_else(|| anyhow!("expected missing parent error"))?;
 
     assert!(error.is_io());
-    assert_eq!(error.io_error_kind(), Some(IoErrorKind::NotFound));
+    assert_eq!(error.io_error_kind(), Some(io::ErrorKind::NotFound));
     Ok(())
 }
 
@@ -750,18 +749,16 @@ async fn test_is_char_device() -> Result<()> {
 async fn test_is_fifo() -> Result<()> {
     use std::{
         ffi::CString,
-        io::Error as IoError,
+        io,
         os::unix::ffi::OsStrExt,
     };
-
-    use libc::mkfifo;
 
     let temp_dir = tempdir()?;
     let fifo = path!(&temp_dir) / "fifo";
     let fifo_path = CString::new(fifo.as_os_str().as_bytes())?;
     // SAFETY: `fifo_path` is a valid NUL-terminated string that outlives the call.
-    if unsafe { mkfifo(fifo_path.as_ptr(), 0o600) } != 0 {
-        return Err(IoError::last_os_error().into());
+    if unsafe { libc::mkfifo(fifo_path.as_ptr(), 0o600) } != 0 {
+        return Err(io::Error::last_os_error().into());
     }
 
     assert!(fifo.is_fifo().await?);

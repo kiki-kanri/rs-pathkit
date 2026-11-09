@@ -167,6 +167,7 @@ sea-orm = ["dep:sea-orm"]
 # =============================================================================
 
 [dependencies]
+anyhow = "1.0.104"
 async-trait = { version = "0.1.92", optional = true }
 derive_more = { version = "2.1.1", features = ["as_ref", "from", "into"] }
 filetime = "0.2.29"
@@ -296,7 +297,6 @@ windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
 
 # Test/example/bench-only dependencies.
 [dev-dependencies]
-anyhow = "1.0.104"
 libc = "0.2.191"
 sea-orm = { version = "2.0.4", features = ["mock"] }
 tempfile = "3.27.0"
