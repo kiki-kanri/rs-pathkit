@@ -6,6 +6,7 @@ use std::{
     fs::{
         self,
         File,
+        FileTimes,
         Metadata,
         OpenOptions,
         Permissions,
@@ -25,10 +26,6 @@ use std::{
     },
 };
 
-use filetime::{
-    FileTime,
-    set_file_mtime,
-};
 use serde::{
     Serialize,
     de::DeserializeOwned,
@@ -482,7 +479,7 @@ impl SyncFsOps for Path {
             OpenOptions::new().write(true).create(true).truncate(false).open(self)?;
         }
 
-        set_file_mtime(self, FileTime::now())
+        fs::set_times(self, FileTimes::new().set_modified(SystemTime::now()))
     }
 
     fn truncate_sync(&self, len: Option<u64>) -> io::Result<()> {
