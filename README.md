@@ -23,7 +23,7 @@ No features are enabled by default.
 | Feature | Enables |
 | --- | --- |
 | `full` | Every feature below |
-| `async-fs-ops` | `async_fs_ops::AsyncFsOps`, Tokio-backed async counterparts of the sync operations |
+| `async-fs-ops` | The `async_fs_ops` module: Tokio-backed async counterparts of the sync operations; needs a Tokio runtime |
 
 ## License
 
