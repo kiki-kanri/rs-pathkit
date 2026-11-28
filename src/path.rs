@@ -50,7 +50,6 @@ pub struct Path(PathBuf);
 
 impl Path {
     /// Copies the path data; use [`Path::from`] to take ownership of an existing buffer.
-    #[inline]
     pub fn new(path: impl AsRef<StdPath>) -> Self {
         Self(path.as_ref().to_path_buf())
     }
@@ -94,7 +93,6 @@ impl Path {
         &self.0
     }
 
-    #[inline]
     #[must_use]
     pub fn join(&self, path: impl AsRef<StdPath>) -> Self {
         Self(self.0.join(path))
@@ -108,7 +106,6 @@ impl Path {
     /// # Panics
     ///
     /// Panics if `extension` contains a path separator, as the std method does.
-    #[inline]
     #[must_use]
     pub fn with_added_extension<S: AsRef<OsStr>>(&self, extension: S) -> Self {
         Self(self.0.with_added_extension(extension))
@@ -117,13 +114,11 @@ impl Path {
     /// # Panics
     ///
     /// Panics if `extension` contains a path separator, as the std method does.
-    #[inline]
     #[must_use]
     pub fn with_extension<S: AsRef<OsStr>>(&self, extension: S) -> Self {
         Self(self.0.with_extension(extension))
     }
 
-    #[inline]
     #[must_use]
     pub fn with_file_name<S: AsRef<OsStr>>(&self, file_name: S) -> Self {
         Self(self.0.with_file_name(file_name))
@@ -164,7 +159,6 @@ impl<P: AsRef<StdPath>> Div<P> for Path {
     type Output = Path;
 
     /// Reuses the left-hand buffer.
-    #[inline]
     fn div(mut self, rhs: P) -> Path {
         self.0.push(rhs);
         self
@@ -174,7 +168,6 @@ impl<P: AsRef<StdPath>> Div<P> for Path {
 impl<P: AsRef<StdPath>> Div<P> for &Path {
     type Output = Path;
 
-    #[inline]
     fn div(self, rhs: P) -> Path {
         self.join(rhs)
     }
