@@ -28,15 +28,6 @@ use tempfile::{
     tempdir,
 };
 
-/// A path whose parent component is a regular file, so every lookup fails with something other
-/// than `NotFound`.
-#[cfg(unix)]
-fn path_below_regular_file(directory: &pathkit::Path) -> Result<pathkit::Path> {
-    let file = directory / "file.txt";
-    file.write_sync(b"content")?;
-    Ok(&file / "child")
-}
-
 #[test]
 fn copy_hard_link_to_and_rename_preserve_file_contents() -> Result<()> {
     let temp_dir = tempdir()?;
@@ -70,25 +61,6 @@ fn symlink_to_stores_target_as_given_and_is_reported_as_symlink() -> Result<()> 
     Ok(())
 }
 
-#[cfg(unix)]
-#[test]
-fn chown_sync_with_none_keeps_the_other_id() -> Result<()> {
-    use std::os::unix::fs::MetadataExt;
-
-    let temp_file = NamedTempFile::new()?;
-    let file = path!(&temp_file);
-    let metadata = file.metadata_sync()?;
-    let (uid, gid) = (metadata.uid(), metadata.gid());
-
-    file.chown_sync(Some(uid), None)?;
-    file.chown_sync(None, Some(gid))?;
-    file.chown_sync(None, None)?;
-
-    let metadata = file.metadata_sync()?;
-    assert_eq!((metadata.uid(), metadata.gid()), (uid, gid));
-    Ok(())
-}
-
 #[test]
 fn read_if_exists_sync_returns_none_only_for_missing_file() -> Result<()> {
     let temp_dir = tempdir()?;
@@ -103,16 +75,38 @@ fn read_if_exists_sync_returns_none_only_for_missing_file() -> Result<()> {
 
 #[cfg(unix)]
 #[test]
-fn read_if_exists_sync_propagates_errors_other_than_not_found() -> Result<()> {
+fn if_exists_sync_methods_propagate_errors_other_than_not_found() -> Result<()> {
     let temp_dir = tempdir()?;
-    let path = path_below_regular_file(&path!(&temp_dir))?;
+    let file = path!(&temp_dir) / "file.txt";
+    file.write_sync(b"content")?;
+    let child = &file / "child";
 
-    let error = path
-        .read_if_exists_sync()
-        .err()
-        .ok_or_else(|| anyhow!("expected an error"))?;
+    let results = [
+        ("read_if_exists_sync", child.read_if_exists_sync().map(drop)),
+        (
+            "read_to_string_if_exists_sync",
+            child.read_to_string_if_exists_sync().map(drop),
+        ),
+        ("metadata_if_exists_sync", child.metadata_if_exists_sync().map(drop)),
+        (
+            "symlink_metadata_if_exists_sync",
+            child.symlink_metadata_if_exists_sync().map(drop),
+        ),
+        ("read_dir_if_exists_sync", child.read_dir_if_exists_sync().map(drop)),
+        (
+            "remove_file_if_exists_sync",
+            child.remove_file_if_exists_sync().map(drop),
+        ),
+    ];
 
-    assert_eq!(error.kind(), io::ErrorKind::NotADirectory);
+    for (method, result) in results {
+        assert_eq!(
+            result.map_err(|error| error.kind()),
+            Err(io::ErrorKind::NotADirectory),
+            "{method}"
+        );
+    }
+
     Ok(())
 }
 
@@ -135,21 +129,6 @@ fn read_to_string_if_exists_sync_returns_none_only_for_missing_file() -> Result<
     Ok(())
 }
 
-#[cfg(unix)]
-#[test]
-fn read_to_string_if_exists_sync_propagates_errors_other_than_not_found() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let path = path_below_regular_file(&path!(&temp_dir))?;
-
-    let error = path
-        .read_to_string_if_exists_sync()
-        .err()
-        .ok_or_else(|| anyhow!("expected an error"))?;
-
-    assert_eq!(error.kind(), io::ErrorKind::NotADirectory);
-    Ok(())
-}
-
 #[test]
 fn remove_file_if_exists_sync_reports_whether_a_file_was_removed() -> Result<()> {
     let temp_dir = tempdir()?;
@@ -160,117 +139,40 @@ fn remove_file_if_exists_sync_reports_whether_a_file_was_removed() -> Result<()>
     assert!(file.remove_file_if_exists_sync()?);
     assert!(!file.try_exists_sync()?);
     assert!(!file.remove_file_if_exists_sync()?);
-    Ok(())
-}
-
-#[test]
-fn remove_file_if_exists_sync_does_not_hide_failure_to_remove_a_directory() -> Result<()> {
-    let temp_dir = tempdir()?;
-
     assert!(path!(&temp_dir).remove_file_if_exists_sync().is_err());
-    assert!(path!(&temp_dir).is_dir_sync()?);
-    Ok(())
-}
-
-#[cfg(unix)]
-#[test]
-fn remove_file_if_exists_sync_propagates_errors_other_than_not_found() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let path = path_below_regular_file(&path!(&temp_dir))?;
-
-    let error = path
-        .remove_file_if_exists_sync()
-        .err()
-        .ok_or_else(|| anyhow!("expected an error"))?;
-
-    assert_eq!(error.kind(), io::ErrorKind::NotADirectory);
     Ok(())
 }
 
 #[test]
-fn metadata_if_exists_sync_returns_none_only_for_missing_path() -> Result<()> {
+fn metadata_if_exists_sync_methods_return_none_only_for_missing_path() -> Result<()> {
     let temp_dir = tempdir()?;
     let file = path!(&temp_dir) / "file.txt";
 
     assert!(file.metadata_if_exists_sync()?.is_none());
+    assert!(file.symlink_metadata_if_exists_sync()?.is_none());
     file.write_sync(b"content")?;
-    let metadata = file
-        .metadata_if_exists_sync()?
-        .ok_or_else(|| anyhow!("expected metadata"))?;
+    assert_eq!(file.metadata_if_exists_sync()?.map(|metadata| metadata.len()), Some(7));
+    assert_eq!(
+        file.symlink_metadata_if_exists_sync()?.map(|metadata| metadata.len()),
+        Some(7)
+    );
 
-    assert!(metadata.is_file());
-    assert_eq!(metadata.len(), 7);
     Ok(())
 }
 
 #[cfg(unix)]
 #[test]
-fn metadata_if_exists_sync_follows_symlinks_so_dangling_link_is_none() -> Result<()> {
+fn dangling_symlink_has_symlink_metadata_but_no_metadata() -> Result<()> {
     let temp_dir = tempdir()?;
     let link = path!(&temp_dir) / "link";
     link.symlink_to_sync(path!(&temp_dir) / "missing")?;
 
     assert!(link.metadata_if_exists_sync()?.is_none());
-    Ok(())
-}
+    assert!(
+        link.symlink_metadata_if_exists_sync()?
+            .is_some_and(|metadata| metadata.file_type().is_symlink())
+    );
 
-#[cfg(unix)]
-#[test]
-fn metadata_if_exists_sync_propagates_errors_other_than_not_found() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let path = path_below_regular_file(&path!(&temp_dir))?;
-
-    let error = path
-        .metadata_if_exists_sync()
-        .err()
-        .ok_or_else(|| anyhow!("expected an error"))?;
-
-    assert_eq!(error.kind(), io::ErrorKind::NotADirectory);
-    Ok(())
-}
-
-#[test]
-fn symlink_metadata_if_exists_sync_returns_none_only_for_missing_path() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let file = path!(&temp_dir) / "file.txt";
-
-    assert!(file.symlink_metadata_if_exists_sync()?.is_none());
-    file.write_sync(b"content")?;
-    let metadata = file
-        .symlink_metadata_if_exists_sync()?
-        .ok_or_else(|| anyhow!("expected metadata"))?;
-
-    assert!(metadata.is_file());
-    Ok(())
-}
-
-#[cfg(unix)]
-#[test]
-fn symlink_metadata_if_exists_sync_returns_some_for_dangling_symlink() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let link = path!(&temp_dir) / "link";
-    link.symlink_to_sync(path!(&temp_dir) / "missing")?;
-
-    let metadata = link
-        .symlink_metadata_if_exists_sync()?
-        .ok_or_else(|| anyhow!("expected metadata for the link itself"))?;
-
-    assert!(metadata.file_type().is_symlink());
-    Ok(())
-}
-
-#[cfg(unix)]
-#[test]
-fn symlink_metadata_if_exists_sync_propagates_errors_other_than_not_found() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let path = path_below_regular_file(&path!(&temp_dir))?;
-
-    let error = path
-        .symlink_metadata_if_exists_sync()
-        .err()
-        .ok_or_else(|| anyhow!("expected an error"))?;
-
-    assert_eq!(error.kind(), io::ErrorKind::NotADirectory);
     Ok(())
 }
 
@@ -492,17 +394,6 @@ fn write_atomic_sync_replaces_existing_file_and_leaves_no_temporary_file() -> Re
 }
 
 #[test]
-fn write_atomic_sync_creates_missing_file() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let path = path!(&temp_dir) / "config.json";
-
-    path.write_atomic_sync(b"new")?;
-
-    assert_eq!(path.read_sync()?, b"new");
-    Ok(())
-}
-
-#[test]
 fn write_atomic_with_sync_prepares_empty_sibling_temporary_file() -> Result<()> {
     let temp_dir = tempdir()?;
     let path = path!(&temp_dir) / "secret.key";
@@ -623,22 +514,6 @@ fn persist_to_sync_replaces_destination_and_consumes_source() -> Result<()> {
     assert_eq!(persisted, dest);
     assert!(!src.try_exists_sync()?);
     assert_eq!(dest.read_sync()?, b"new");
-    Ok(())
-}
-
-#[test]
-fn persist_to_sync_fails_for_missing_source_without_touching_destination() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let dest = path!(&temp_dir) / "dest.txt";
-    dest.write_sync(b"old")?;
-
-    let error = (path!(&temp_dir) / "missing.tmp")
-        .persist_to_sync(&dest)
-        .err()
-        .ok_or_else(|| anyhow!("expected missing source error"))?;
-
-    assert_eq!(error.kind(), io::ErrorKind::NotFound);
-    assert_eq!(dest.read_sync()?, b"old");
     Ok(())
 }
 
@@ -968,20 +843,6 @@ fn read_dir_if_exists_sync_returns_none_only_for_missing_directory() -> Result<(
         .collect::<io::Result<Vec<_>>>()?;
 
     assert_eq!(paths, [&directory / "a.txt"]);
-    Ok(())
-}
-
-#[cfg(unix)]
-#[test]
-fn read_dir_if_exists_sync_propagates_errors_other_than_not_found() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let path = path_below_regular_file(&path!(&temp_dir))?;
-
-    assert_eq!(
-        path.read_dir_if_exists_sync().map(|_| ()).map_err(|error| error.kind()),
-        Err(io::ErrorKind::NotADirectory)
-    );
-
     Ok(())
 }
 

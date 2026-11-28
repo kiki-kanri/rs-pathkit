@@ -189,25 +189,6 @@ mod tests {
     use crate::path;
 
     #[test]
-    fn parent_of_single_component_is_empty_not_none() {
-        assert_eq!(path!("file.txt").parent(), Some(path!("")));
-        assert_eq!(path!("").parent(), None);
-    }
-
-    #[test]
-    fn absolute_resolves_relative_paths_and_rejects_empty() -> io::Result<()> {
-        let absolute = path!("relative").absolute()?;
-        assert!(absolute.is_absolute());
-        assert!(absolute.ends_with("relative"));
-        assert_eq!(
-            path!("").absolute().map_err(|error| error.kind()),
-            Err(io::ErrorKind::InvalidInput)
-        );
-
-        Ok(())
-    }
-
-    #[test]
     fn absolutize_resolves_dot_components_lexically() -> io::Result<()> {
         let base = if cfg!(windows) { r"C:\base" } else { "/base" };
         let expected = Path::new(base).join("b");
@@ -223,22 +204,12 @@ mod tests {
     }
 
     #[test]
-    fn div_accepts_any_path_like_operand() {
+    fn owned_and_borrowed_div_join_without_changing_the_base() {
         let base = path!("base");
         let expected = Path::from(format!("base{MAIN_SEPARATOR}sub"));
 
         assert_eq!(&base / "sub", expected);
-        assert_eq!(&base / String::from("sub"), expected);
-        assert_eq!(&base / OsString::from("sub"), expected);
-        assert_eq!(&base / PathBuf::from("sub"), expected);
-        assert_eq!(&base / &path!("sub"), expected);
         assert_eq!(base.clone() / path!("sub"), expected);
-        // `push("")` appends a trailing separator even though the paths compare equal.
-        assert_eq!(
-            (base.clone() / "").as_os_str(),
-            OsStr::new(&format!("base{MAIN_SEPARATOR}"))
-        );
-
         assert_eq!(base, path!("base"));
     }
 

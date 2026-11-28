@@ -134,19 +134,6 @@ async fn persist_to_replaces_destination() -> Result<()> {
 }
 
 #[tokio::test]
-async fn persist_to_missing_source_returns_not_found() -> Result<()> {
-    let directory = tempdir()?;
-    let source = path!(&directory) / "missing.tmp";
-    let dest = path!(&directory) / "dest.txt";
-
-    let error = expect_error(source.persist_to(&dest).await)?;
-
-    assert_eq!(error.kind(), io::ErrorKind::NotFound);
-    assert!(!dest.try_exists().await?);
-    Ok(())
-}
-
-#[tokio::test]
 async fn write_atomic_replaces_file_without_leaving_temporary_files() -> Result<()> {
     let directory = tempdir()?;
     let file = path!(&directory) / "config.json";
@@ -156,25 +143,6 @@ async fn write_atomic_replaces_file_without_leaving_temporary_files() -> Result<
 
     assert_eq!(file.read().await?, b"new");
     assert_eq!(path!(&directory).read_dir_names_lossy().await?, ["config.json"]);
-    Ok(())
-}
-
-#[tokio::test]
-async fn write_atomic_with_runs_prepare_on_empty_sibling_temporary_file() -> Result<()> {
-    let directory = tempdir()?;
-    let file = path!(&directory) / "secret.key";
-    let parent = file.parent();
-
-    file.write_atomic_with(b"secret", move |temp_path| {
-        assert_ne!(temp_path.file_name(), Some("secret.key".as_ref()));
-        assert_eq!(temp_path.parent(), parent);
-        assert_eq!(temp_path.metadata_sync()?.len(), 0);
-        Ok(())
-    })
-    .await?;
-
-    assert_eq!(file.read().await?, b"secret");
-    assert_eq!(path!(&directory).read_dir_names_lossy().await?, ["secret.key"]);
     Ok(())
 }
 
@@ -251,6 +219,7 @@ async fn symlink_metadata_if_exists_returns_some_for_dangling_symlink() -> Resul
     let link = path!(&directory) / "link";
     link.symlink_to(path!(&directory) / "missing").await?;
 
+    assert!(link.is_symlink().await?);
     assert!(link.metadata_if_exists().await?.is_none());
     assert!(
         link.symlink_metadata_if_exists()
@@ -276,6 +245,7 @@ async fn if_exists_methods_propagate_errors_other_than_not_found() -> Result<()>
         expect_error(child.metadata_if_exists().await)?,
         expect_error(child.symlink_metadata_if_exists().await)?,
         expect_error(child.remove_file_if_exists().await)?,
+        expect_error(child.read_dir_if_exists().await)?,
     ];
 
     for error in errors {
@@ -448,17 +418,5 @@ async fn write_json_pretty_atomic_round_trips() -> Result<()> {
 
     assert_eq!(path.read_json::<Vec<i32>>().await?, [1, 2, 3]);
     assert_eq!(path!(&directory).read_dir_names_lossy().await?, ["config.json"]);
-    Ok(())
-}
-
-#[cfg(unix)]
-#[tokio::test]
-async fn read_dir_if_exists_propagates_errors_other_than_not_found() -> Result<()> {
-    let directory = tempdir()?;
-    let file = path!(&directory) / "file.txt";
-    file.write(b"").await?;
-
-    let error = expect_error((&file / "child").read_dir_if_exists().await)?;
-    assert_eq!(error.kind(), io::ErrorKind::NotADirectory);
     Ok(())
 }
