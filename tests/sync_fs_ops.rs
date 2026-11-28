@@ -1,6 +1,9 @@
 use std::{
     fs,
-    io,
+    io::{
+        self,
+        Write,
+    },
     sync::Barrier,
     thread,
 };
@@ -924,10 +927,7 @@ fn failed_replace_keeps_destination_and_cleans_up() -> Result<()> {
 fn write_atomic_sync_gives_up_after_retrying_a_destination_without_delete_sharing() -> Result<()> {
     use std::{
         os::windows::fs::OpenOptionsExt,
-        time::{
-            Duration,
-            Instant,
-        },
+        time::Duration,
     };
 
     // FILE_SHARE_READ | FILE_SHARE_WRITE, without FILE_SHARE_DELETE.
@@ -950,5 +950,124 @@ fn write_atomic_sync_gives_up_after_retrying_a_destination_without_delete_sharin
     assert_eq!(path!(&temp_dir).read_dir_names_lossy_sync()?, ["dest"]);
     dest.write_atomic_sync(b"new")?;
     assert_eq!(dest.read_sync()?, b"new");
+    Ok(())
+}
+
+#[test]
+fn read_dir_if_exists_sync_returns_none_only_for_missing_directory() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let directory = path!(&temp_dir);
+    (&directory / "a.txt").write_sync(b"")?;
+
+    assert!((&directory / "missing").read_dir_if_exists_sync()?.is_none());
+    let paths = directory
+        .read_dir_if_exists_sync()?
+        .into_iter()
+        .flatten()
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<io::Result<Vec<_>>>()?;
+
+    assert_eq!(paths, [&directory / "a.txt"]);
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn read_dir_if_exists_sync_propagates_errors_other_than_not_found() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path_below_regular_file(&path!(&temp_dir))?;
+
+    assert_eq!(
+        path.read_dir_if_exists_sync().map(|_| ()).map_err(|error| error.kind()),
+        Err(io::ErrorKind::NotADirectory)
+    );
+
+    Ok(())
+}
+
+#[test]
+fn atomic_writer_publishes_streamed_contents_only_on_commit() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let dest = path!(&temp_dir) / "dest";
+    dest.write_sync(b"old")?;
+
+    let mut writer = dest.atomic_writer_sync()?;
+    io::copy(&mut &b"streamed"[..], &mut writer)?;
+    assert_eq!(dest.read_sync()?, b"old");
+    writer.commit()?;
+
+    assert_eq!(dest.read_sync()?, b"streamed");
+    assert_eq!(path!(&temp_dir).read_dir_names_lossy_sync()?, ["dest"]);
+    Ok(())
+}
+
+#[test]
+fn atomic_writer_accepts_contents_written_by_path() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let dest = path!(&temp_dir) / "dest";
+
+    let writer = dest.atomic_writer_sync()?;
+    assert_eq!(writer.path().parent(), dest.parent());
+    writer.path().write_sync(b"external")?;
+    writer.commit()?;
+
+    assert_eq!(dest.read_sync()?, b"external");
+    Ok(())
+}
+
+#[test]
+fn atomic_writer_dropped_without_commit_keeps_destination() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let dest = path!(&temp_dir) / "dest";
+    dest.write_sync(b"old")?;
+
+    let mut writer = dest.atomic_writer_sync()?;
+    writer.write_all(b"abandoned")?;
+    drop(writer);
+
+    assert_eq!(dest.read_sync()?, b"old");
+    assert_eq!(path!(&temp_dir).read_dir_names_lossy_sync()?, ["dest"]);
+    Ok(())
+}
+
+#[test]
+fn atomic_writer_commit_noclobber_refuses_existing_destination() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let dest = path!(&temp_dir) / "dest";
+
+    let mut writer = dest.atomic_writer_sync()?;
+    writer.write_all(b"first")?;
+    writer.commit_noclobber()?;
+    assert_eq!(dest.read_sync()?, b"first");
+
+    let mut writer = dest.atomic_writer_sync()?;
+    writer.write_all(b"second")?;
+    assert_eq!(
+        writer.commit_noclobber().map_err(|error| error.kind()),
+        Err(io::ErrorKind::AlreadyExists)
+    );
+
+    assert_eq!(dest.read_sync()?, b"first");
+    assert_eq!(path!(&temp_dir).read_dir_names_lossy_sync()?, ["dest"]);
+    Ok(())
+}
+
+#[test]
+fn write_json_atomic_sync_round_trips_and_creates_private_file() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path!(&temp_dir) / "config.json";
+
+    path.write_json_atomic_sync(&[1, 2, 3])?;
+    assert_eq!(path.read_json_sync::<Vec<i32>>()?, [1, 2, 3]);
+    path.write_json_atomic_sync(&[4])?;
+    assert_eq!(path.read_json_sync::<Vec<i32>>()?, [4]);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        assert_eq!(path.metadata_sync()?.permissions().mode() & 0o777, 0o600);
+    }
+
     Ok(())
 }

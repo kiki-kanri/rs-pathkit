@@ -121,6 +121,8 @@ pub trait AsyncFsOps {
 
     async fn persist_to(&self, dest: impl AsRef<StdPath> + Send) -> io::Result<Path>;
 
+    async fn read_dir_if_exists(&self) -> io::Result<Option<AsyncReadDir>>;
+
     async fn read_dir(&self) -> io::Result<AsyncReadDir>;
 
     async fn read_dir_entries(&self) -> io::Result<Vec<AsyncPathEntry>>;
@@ -170,6 +172,9 @@ pub trait AsyncFsOps {
         contents: impl AsRef<[u8]> + Send,
         prepare: impl for<'a> FnOnce(&'a Path) -> io::Result<()> + Send + 'static,
     ) -> io::Result<()>;
+
+    /// Serialization runs on the polling thread.
+    async fn write_json_atomic<T: Serialize + Sync + ?Sized>(&self, data: &T) -> serde_json::Result<()>;
 
     /// Serialization runs on the polling thread.
     async fn write_json<T: Serialize + Sync + ?Sized>(&self, data: &T) -> serde_json::Result<()>;
@@ -290,6 +295,10 @@ impl AsyncFsOps for Path {
         spawn_blocking(move || source.persist_to_sync(dest)).await?
     }
 
+    async fn read_dir_if_exists(&self) -> io::Result<Option<AsyncReadDir>> {
+        none_if_not_found(self.read_dir().await)
+    }
+
     async fn read_dir(&self) -> io::Result<AsyncReadDir> {
         fs::read_dir(self).await.map(AsyncReadDir)
     }
@@ -403,6 +412,12 @@ impl AsyncFsOps for Path {
         let path = self.clone();
         let contents = contents.as_ref().to_vec();
         spawn_blocking(move || path.write_atomic_with_sync(contents, prepare)).await?
+    }
+
+    async fn write_json_atomic<T: Serialize + Sync + ?Sized>(&self, data: &T) -> serde_json::Result<()> {
+        self.write_atomic(serde_json::to_vec_pretty(data)?)
+            .await
+            .map_err(serde_json::Error::io)
     }
 
     async fn write_json<T: Serialize + Sync + ?Sized>(&self, data: &T) -> serde_json::Result<()> {

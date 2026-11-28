@@ -4,10 +4,7 @@ use std::{
         File,
         OpenOptions,
     },
-    io::{
-        self,
-        Write,
-    },
+    io,
     path::Path as StdPath,
     process,
     sync::atomic::{
@@ -25,13 +22,15 @@ use crate::Path;
 const TEMP_FILE_ATTEMPTS: u32 = 64;
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-pub(crate) fn write_atomic(
-    dest: &Path,
-    contents: &[u8],
-    prepare: impl FnOnce(&Path) -> io::Result<()>,
-) -> io::Result<()> {
-    let (temp_path, mut file) = create_temp_sibling(dest)?;
-    let mut cleanup = RemoveOnDrop(Some(&temp_path));
+/// Creates the temporary sibling for `dest`, already carrying an existing regular file's permission
+/// bits on Unix.
+pub(crate) fn stage(dest: &Path) -> io::Result<(File, TempGuard)> {
+    let (temp_path, file) = create_temp_sibling(dest)?;
+    let guard = TempGuard {
+        path: temp_path,
+        armed: true,
+    };
+
     // Keep an existing regular file's permission bits instead of the temporary file's 0600; a
     // symlink is replaced rather than followed, so its target's mode is not consulted.
     #[cfg(unix)]
@@ -43,12 +42,44 @@ pub(crate) fn write_atomic(
         file.set_permissions(fs::Permissions::from_mode(metadata.permissions().mode() & 0o777))?;
     }
 
-    prepare(&temp_path)?;
-    file.write_all(contents)?;
-    file.sync_all()?;
+    Ok((file, guard))
+}
+
+pub(crate) fn publish_replacing(file: File, guard: TempGuard, dest: &StdPath) -> io::Result<()> {
+    publish(file, guard, dest, rename_retrying)
+}
+
+pub(crate) fn publish_noclobber(file: File, guard: TempGuard, dest: &StdPath) -> io::Result<()> {
+    publish(file, guard, dest, |temp, dest| {
+        // A hard link fails with `AlreadyExists` instead of replacing.
+        fs::hard_link(temp, dest)?;
+        // The destination is already published, so a leftover temporary name is not an error.
+        let _ = fs::remove_file(temp);
+        Ok(())
+    })
+}
+
+/// Syncs and closes `file`, then publishes the staged file at `dest` with `place`.
+fn publish(
+    file: File,
+    mut guard: TempGuard,
+    dest: &StdPath,
+    place: impl FnOnce(&StdPath, &StdPath) -> io::Result<()>,
+) -> io::Result<()> {
+    // Close before any early return so the guard's cleanup never races an open handle.
+    let synced = file.sync_all();
     drop(file);
-    replace_durably(&temp_path, dest)?;
-    cleanup.0 = None;
+    synced?;
+
+    // Open the directory first so a missing read permission fails before anything is published.
+    #[cfg(unix)]
+    let dest_dir = File::open(parent_or_current_dir(dest))?;
+    place(&guard.path, dest)?;
+
+    // Once published, the temporary name may be reused by another writer; never remove it again.
+    guard.armed = false;
+    #[cfg(unix)]
+    dest_dir.sync_all()?;
     Ok(())
 }
 
@@ -73,12 +104,16 @@ pub(crate) fn persist(source: &StdPath, dest: &StdPath) -> io::Result<()> {
 }
 
 /// Removes the temporary file on errors and unwinding unless disarmed.
-struct RemoveOnDrop<'a>(Option<&'a Path>);
+#[derive(Debug)]
+pub(crate) struct TempGuard {
+    pub(crate) path: Path,
+    armed: bool,
+}
 
-impl Drop for RemoveOnDrop<'_> {
+impl Drop for TempGuard {
     fn drop(&mut self) {
-        if let Some(path) = self.0 {
-            let _ = fs::remove_file(path);
+        if self.armed {
+            let _ = fs::remove_file(&self.path);
         }
     }
 }

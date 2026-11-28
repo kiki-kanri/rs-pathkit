@@ -379,7 +379,6 @@ async fn link_methods_use_the_receiver_as_the_new_link() -> Result<()> {
 fn dropping_an_in_flight_atomic_write_still_publishes_it() -> Result<()> {
     use std::{
         future::Future,
-        sync::mpsc,
         task::{
             Context,
             Waker,
@@ -417,5 +416,49 @@ fn dropping_an_in_flight_atomic_write_still_publishes_it() -> Result<()> {
     drop(runtime);
     assert_eq!(dest.read_sync()?, b"new");
     assert_eq!(path!(&directory).read_dir_names_lossy_sync()?, ["dest"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn read_dir_if_exists_returns_none_for_missing_directory() -> Result<()> {
+    let directory = tempdir()?;
+    (path!(&directory) / "a.txt").write(b"").await?;
+
+    assert!((path!(&directory) / "missing").read_dir_if_exists().await?.is_none());
+    let mut read_dir = path!(&directory)
+        .read_dir_if_exists()
+        .await?
+        .ok_or_else(|| anyhow!("expected an existing directory"))?;
+
+    let entry = read_dir
+        .next_entry()
+        .await?
+        .ok_or_else(|| anyhow!("expected one entry"))?;
+
+    assert_eq!(entry.path(), path!(&directory) / "a.txt");
+    Ok(())
+}
+
+#[tokio::test]
+async fn write_json_atomic_round_trips() -> Result<()> {
+    let directory = tempdir()?;
+    let path = path!(&directory) / "config.json";
+
+    path.write_json_atomic(&[1, 2, 3]).await?;
+
+    assert_eq!(path.read_json::<Vec<i32>>().await?, [1, 2, 3]);
+    assert_eq!(path!(&directory).read_dir_names_lossy().await?, ["config.json"]);
+    Ok(())
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn read_dir_if_exists_propagates_errors_other_than_not_found() -> Result<()> {
+    let directory = tempdir()?;
+    let file = path!(&directory) / "file.txt";
+    file.write(b"").await?;
+
+    let error = expect_error((&file / "child").read_dir_if_exists().await)?;
+    assert_eq!(error.kind(), io::ErrorKind::NotADirectory);
     Ok(())
 }

@@ -10,7 +10,10 @@ use std::{
         OpenOptions,
         Permissions,
     },
-    io,
+    io::{
+        self,
+        Write,
+    },
     path::Path as StdPath,
     time::SystemTime,
 };
@@ -56,6 +59,16 @@ use crate::{
 /// # Ok::<(), std::io::Error>(())
 /// ```
 pub trait SyncFsOps {
+    /// Starts a replacement of `self` that is written through the returned [`AtomicWriter`] and
+    /// becomes visible only on [`AtomicWriter::commit`]. Use it when the contents are streamed or
+    /// written by another library through [`AtomicWriter::path`]; otherwise prefer
+    /// [`Self::write_atomic_sync`].
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`io::ErrorKind::InvalidInput`] when the path has no file name.
+    fn atomic_writer_sync(&self) -> io::Result<AtomicWriter>;
+
     fn canonicalize_sync(&self) -> io::Result<Path>;
 
     #[cfg(unix)]
@@ -121,6 +134,8 @@ pub trait SyncFsOps {
     fn read_dir_names_lossy_sync(&self) -> io::Result<Vec<String>>;
 
     fn read_dir_paths_sync(&self) -> io::Result<Vec<Path>>;
+
+    fn read_dir_if_exists_sync(&self) -> io::Result<Option<ReadDir>>;
 
     fn read_dir_sync(&self) -> io::Result<ReadDir>;
 
@@ -188,6 +203,9 @@ pub trait SyncFsOps {
         prepare: impl FnOnce(&Path) -> io::Result<()>,
     ) -> io::Result<()>;
 
+    /// Like [`Self::write_json_sync`], but replaces the file through [`Self::write_atomic_sync`].
+    fn write_json_atomic_sync<T: Serialize + ?Sized>(&self, data: &T) -> serde_json::Result<()>;
+
     /// Writes pretty-printed JSON.
     fn write_json_sync<T: Serialize + ?Sized>(&self, data: &T) -> serde_json::Result<()>;
 
@@ -195,6 +213,15 @@ pub trait SyncFsOps {
 }
 
 impl SyncFsOps for Path {
+    fn atomic_writer_sync(&self) -> io::Result<AtomicWriter> {
+        let (file, temp) = atomic_write::stage(self)?;
+        Ok(AtomicWriter {
+            file,
+            dest: self.clone(),
+            temp,
+        })
+    }
+
     fn canonicalize_sync(&self) -> io::Result<Path> {
         fs::canonicalize(self).map(Self::from)
     }
@@ -341,6 +368,10 @@ impl SyncFsOps for Path {
             .collect()
     }
 
+    fn read_dir_if_exists_sync(&self) -> io::Result<Option<ReadDir>> {
+        none_if_not_found(self.read_dir_sync())
+    }
+
     fn read_dir_sync(&self) -> io::Result<ReadDir> {
         fs::read_dir(self).map(ReadDir)
     }
@@ -417,7 +448,7 @@ impl SyncFsOps for Path {
     }
 
     fn write_atomic_sync(&self, contents: impl AsRef<[u8]>) -> io::Result<()> {
-        atomic_write::write_atomic(self, contents.as_ref(), |_| Ok(()))
+        self.write_atomic_with_sync(contents, |_| Ok(()))
     }
 
     fn write_atomic_with_sync(
@@ -425,7 +456,15 @@ impl SyncFsOps for Path {
         contents: impl AsRef<[u8]>,
         prepare: impl FnOnce(&Path) -> io::Result<()>,
     ) -> io::Result<()> {
-        atomic_write::write_atomic(self, contents.as_ref(), prepare)
+        let mut writer = self.atomic_writer_sync()?;
+        prepare(writer.path())?;
+        writer.write_all(contents.as_ref())?;
+        writer.commit()
+    }
+
+    fn write_json_atomic_sync<T: Serialize + ?Sized>(&self, data: &T) -> serde_json::Result<()> {
+        self.write_atomic_sync(serde_json::to_vec_pretty(data)?)
+            .map_err(serde_json::Error::io)
     }
 
     fn write_json_sync<T: Serialize + ?Sized>(&self, data: &T) -> serde_json::Result<()> {
@@ -470,6 +509,71 @@ impl PathEntry {
     #[inline]
     pub fn into_dir_entry(self) -> DirEntry {
         self.0
+    }
+}
+
+/// A pending replacement of a file, created by [`SyncFsOps::atomic_writer_sync`].
+///
+/// Writes go to a temporary file next to the destination, created like the one used by
+/// [`SyncFsOps::write_atomic_with_sync`] (same permission rules). Dropping the writer without
+/// committing tries to remove the temporary file; readers only ever see the old contents or the
+/// complete new ones.
+#[derive(Debug)]
+pub struct AtomicWriter {
+    file: File,
+    dest: Path,
+    temp: atomic_write::TempGuard,
+}
+
+impl AtomicWriter {
+    /// The temporary file's path, for libraries that write by path. They must write in place;
+    /// replacing the file at this path is not detected.
+    #[inline]
+    pub fn path(&self) -> &Path {
+        &self.temp.path
+    }
+
+    #[inline]
+    pub fn file(&self) -> &File {
+        &self.file
+    }
+
+    #[inline]
+    pub fn file_mut(&mut self) -> &mut File {
+        &mut self.file
+    }
+
+    /// Syncs the temporary file and renames it over the destination, as
+    /// [`SyncFsOps::write_atomic_with_sync`] does; on Unix the parent directory is synced too.
+    ///
+    /// # Errors
+    ///
+    /// The destination is unchanged when syncing the file or renaming fails. A failure to sync the
+    /// parent directory is reported after the destination was already replaced.
+    pub fn commit(self) -> io::Result<()> {
+        atomic_write::publish_replacing(self.file, self.temp, &self.dest)
+    }
+
+    /// Like [`Self::commit`], but never replaces an existing destination. Publishes through a hard
+    /// link, so it needs a filesystem with hard links (not FAT or exFAT).
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`io::ErrorKind::AlreadyExists`] when the destination exists.
+    pub fn commit_noclobber(self) -> io::Result<()> {
+        atomic_write::publish_noclobber(self.file, self.temp, &self.dest)
+    }
+}
+
+impl Write for AtomicWriter {
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.file.write(buf)
+    }
+
+    #[inline]
+    fn flush(&mut self) -> io::Result<()> {
+        self.file.flush()
     }
 }
 
