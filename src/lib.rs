@@ -25,11 +25,7 @@
 //! - `async-fs-ops` enables `AsyncFsOps` and `AsyncPathEntry`, adding Tokio and `async-trait`.
 //!   Async filesystem operations require a Tokio runtime with blocking-task support.
 //!   Dropping a future does not roll back completed changes or necessarily stop submitted I/O.
-//! - `sea-orm` adds [SeaORM](https://www.sea-ql.org/SeaORM/) model-field and value conversions.
-//!   Paths are stored as strings; writing a non-Unicode path replaces invalid Unicode with
-//!   the replacement character.
-//! - `all` enables both optional features.
-//! - `full` enables `all`.
+//! - `full` enables every optional feature.
 //!
 //! Enable a feature with `cargo add pathkit --features async-fs-ops`, replacing the feature
 //! name as needed. Serde delegates to [`std::path::PathBuf`]; serialization fails for
@@ -74,8 +70,6 @@ mod core;
 mod div;
 mod entry;
 mod macros;
-#[cfg(feature = "sea-orm")]
-mod sea_orm;
 mod sync_fs_ops;
 mod traits;
 

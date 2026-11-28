@@ -17,7 +17,6 @@ A Rust library that provides a `Path` structure similar to Python's pathlib, wit
 - 📁 **Synchronous I/O**: blocking file system operations via `SyncFsOps`
 - ⚡ **Asynchronous I/O**: non-blocking file system operations via `AsyncFsOps` (requires `async-fs-ops`)
 - 🔄 **Serde Support**: serialize and deserialize `Path`
-- 🗄️ **SeaORM Integration**: use `Path` as a model field (requires `sea-orm`)
 
 ## Installation
 
@@ -31,7 +30,6 @@ Optional features:
 
 ```bash
 cargo add pathkit --features async-fs-ops
-cargo add pathkit --features sea-orm
 cargo add pathkit --features full
 ```
 
@@ -135,33 +133,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### SeaORM Integration
-
-Requires the `sea-orm` feature and SeaORM 2.0.4 or a compatible later 2.x release.
-`Path` is stored as `String` and can be used directly in SeaORM models:
-
-```rust
-use pathkit::Path;
-use sea_orm::entity::prelude::*;
-
-#[derive(Clone, Debug, DeriveEntityModel)]
-#[sea_orm(table_name = "files")]
-struct Model {
-    #[sea_orm(primary_key)]
-    id: i32,
-    path: Path,
-    display_name: Option<Path>,
-}
-```
-
-Implemented SeaORM traits: `Into<Value>`, `ValueType`, `Nullable`, and `TryGetable`.
-
 ## Feature Flags
 
 | Feature | Description |
 |---------|-------------|
 | `async-fs-ops` | Enable async file system operations via tokio |
-| `sea-orm` | Enable SeaORM value/model integration |
 | `all` | Enable all optional features |
 | `full` | Alias of `all` |
 
