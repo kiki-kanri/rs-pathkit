@@ -1,5 +1,64 @@
 # Changelog
 
+## v4.0.0
+
+[compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v3.1.0...v4.0.0)
+
+### 🚀 Enhancements
+
+- **fs-ops:** Add AtomicWriter, read_dir_if_exists, and write_json_atomic ([8742601](https://github.com/kiki-kanri/rs-pathkit/commit/8742601))
+
+### 🩹 Fixes
+
+- **scripts:** Preserve cross-target imports during fixes ([c1964ed](https://github.com/kiki-kanri/rs-pathkit/commit/c1964ed))
+- **scripts:** Install Windows MSVC target before fix-windows runs ([d9e4c5d](https://github.com/kiki-kanri/rs-pathkit/commit/d9e4c5d))
+- **scripts:** Respect the min publish age when upgrading dependencies ([df0d370](https://github.com/kiki-kanri/rs-pathkit/commit/df0d370))
+
+### 💅 Refactors
+
+- Standardize module-qualified imports ([0b1a3ff](https://github.com/kiki-kanri/rs-pathkit/commit/0b1a3ff))
+- Replace filetime with std::fs::set_times ([9cb0925](https://github.com/kiki-kanri/rs-pathkit/commit/9cb0925))
+- ⚠️  Remove the sea-orm integration ([81d12b0](https://github.com/kiki-kanri/rs-pathkit/commit/81d12b0))
+- ⚠️  Consolidate the Path type and expose fs ops through modules ([b48de4e](https://github.com/kiki-kanri/rs-pathkit/commit/b48de4e))
+- **fs-ops:** ⚠️  Reshape the sync and async filesystem APIs ([237b4f0](https://github.com/kiki-kanri/rs-pathkit/commit/237b4f0))
+- ⚠️  Apply inherited permissions at commit and name JSON writers by format ([6b8733c](https://github.com/kiki-kanri/rs-pathkit/commit/6b8733c))
+
+### 📦 Build
+
+- **windows:** Install LLVM 23 from apt.llvm.org for xwin builds ([a7b0502](https://github.com/kiki-kanri/rs-pathkit/commit/a7b0502))
+- **cargo:** Exclude dependency sources from coverage reports ([cc0ecfe](https://github.com/kiki-kanri/rs-pathkit/commit/cc0ecfe))
+- **cargo:** Keep only the full feature alias ([7343b2a](https://github.com/kiki-kanri/rs-pathkit/commit/7343b2a))
+- **cargo:** Raise rust-version to 1.99 ([afc3fe9](https://github.com/kiki-kanri/rs-pathkit/commit/afc3fe9))
+- **cargo:** Anchor package include patterns to the crate root ([d4e5885](https://github.com/kiki-kanri/rs-pathkit/commit/d4e5885))
+
+### 🏡 Chore
+
+- Allow unwrap and expect in tests via clippy config ([6102338](https://github.com/kiki-kanri/rs-pathkit/commit/6102338))
+- Update toolchain version ([f8cc420](https://github.com/kiki-kanri/rs-pathkit/commit/f8cc420))
+- Downgrade toolchain version ([9668a07](https://github.com/kiki-kanri/rs-pathkit/commit/9668a07))
+- Update public scripts and add RULES file ([a28bebf](https://github.com/kiki-kanri/rs-pathkit/commit/a28bebf))
+- Update ignore files ([6f3faa4](https://github.com/kiki-kanri/rs-pathkit/commit/6f3faa4))
+- **cargo:** Configure one-day publish age ([447f71d](https://github.com/kiki-kanri/rs-pathkit/commit/447f71d))
+- **rust:** Move to nightly-2026-11-14 and update Mordant ([6c9339a](https://github.com/kiki-kanri/rs-pathkit/commit/6c9339a))
+- Upgrade deps ([a977ac8](https://github.com/kiki-kanri/rs-pathkit/commit/a977ac8))
+- Update vscode configs ([31264ce](https://github.com/kiki-kanri/rs-pathkit/commit/31264ce))
+
+### 🤖 CI
+
+- Rewrite test and coverage workflow ([fb811a3](https://github.com/kiki-kanri/rs-pathkit/commit/fb811a3))
+- Add MSRV check job and macOS to the test matrix ([17610f9](https://github.com/kiki-kanri/rs-pathkit/commit/17610f9))
+
+#### ⚠️ Breaking Changes
+
+- ⚠️  Remove the sea-orm integration ([81d12b0](https://github.com/kiki-kanri/rs-pathkit/commit/81d12b0))
+- ⚠️  Consolidate the Path type and expose fs ops through modules ([b48de4e](https://github.com/kiki-kanri/rs-pathkit/commit/b48de4e))
+- **fs-ops:** ⚠️  Reshape the sync and async filesystem APIs ([237b4f0](https://github.com/kiki-kanri/rs-pathkit/commit/237b4f0))
+- ⚠️  Apply inherited permissions at commit and name JSON writers by format ([6b8733c](https://github.com/kiki-kanri/rs-pathkit/commit/6b8733c))
+
+### ❤️ Contributors
+
+- Kiki-kanri
+
 ## v3.1.0
 
 [compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v3.0.0...v3.1.0)
