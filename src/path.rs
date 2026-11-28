@@ -181,7 +181,6 @@ mod tests {
             HashMap,
         },
         env,
-        ffi::OsString,
         path::MAIN_SEPARATOR,
     };
 
@@ -222,9 +221,12 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn non_utf8_path_is_preserved_and_displayed_lossily() {
-        use std::os::unix::ffi::{
-            OsStrExt,
-            OsStringExt,
+        use std::{
+            ffi::OsString,
+            os::unix::ffi::{
+                OsStrExt,
+                OsStringExt,
+            },
         };
 
         let bytes = b"/test/\xff".to_vec();
