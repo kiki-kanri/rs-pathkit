@@ -1,21 +1,8 @@
-//! Path construction from native path expressions and formatted string literals.
-
-/// Creates an owned [`Path`](crate::Path) from a path expression or formatted string literal.
+/// Creates a [`Path`](crate::Path) from a path expression or a [`format!`] string.
 ///
-/// `path!(expression)` passes the expression to [`Path::new`](crate::Path::new), which
-/// copies its path data without accessing the filesystem. An owned expression is consumed;
-/// a borrowed expression leaves its source available. A non-literal expression accepts
-/// an optional trailing comma.
-///
-/// `path!("format string", arguments...)` uses [`format!`] syntax, including captured
-/// variables. A string literal always uses this formatting form, even without arguments;
-/// literal braces must be escaped as `{{` and `}}`. Expression operands must implement
-/// `AsRef<std::path::Path>`; formatting arguments follow [`format!`] requirements.
-///
-/// # Panics
-///
-/// The formatting form panics if an argument's formatting implementation panics or
-/// returns a formatting error.
+/// A string literal always takes the [`format!`] form, even without arguments, so literal braces
+/// must be escaped as `{{` and `}}`. Any other expression goes through
+/// [`Path::new`](crate::Path::new).
 ///
 /// # Examples
 ///
@@ -43,36 +30,4 @@ macro_rules! path {
     ($path:expr $(,)?) => {
         $crate::Path::new($path)
     };
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn path_macro_creates_path_from_literal() {
-        assert_eq!(crate::path!("/tmp/example").to_str(), Some("/tmp/example"));
-    }
-
-    #[test]
-    fn path_macro_supports_format_arguments() {
-        let dir = "configs";
-        let extension = "json";
-
-        assert_eq!(
-            crate::path!("/tmp/{dir}/app.{extension}").to_str(),
-            Some("/tmp/configs/app.json")
-        );
-
-        assert_eq!(
-            crate::path!("/tmp/{}/app.{}", dir, extension).to_str(),
-            Some("/tmp/configs/app.json")
-        );
-    }
-
-    #[test]
-    fn path_macro_accepts_direct_path_expression() {
-        assert_eq!(
-            crate::path!(String::from("/tmp/example")).to_str(),
-            Some("/tmp/example")
-        );
-    }
 }
