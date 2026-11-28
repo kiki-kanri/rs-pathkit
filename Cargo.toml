@@ -19,13 +19,13 @@ keywords = [
 ]
 
 include = [
-  "Cargo.toml",
-  "LICENSE*",
-  "README.md",
-  "benches/**",
-  "examples/**",
-  "src/**",
-  "tests/**",
+  "/Cargo.toml",
+  "/LICENSE*",
+  "/README.md",
+  "/benches/**",
+  "/examples/**",
+  "/src/**",
+  "/tests/**",
 ]
 
 # Prevent accidental publishing for private/internal crates.
