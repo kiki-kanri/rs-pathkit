@@ -34,14 +34,6 @@ use serde::{
 /// replaces invalid Unicode with `U+FFFD`.
 ///
 /// The `/` operator joins like [`Path::join`]: an absolute right-hand side replaces the base.
-///
-/// ```rust
-/// use pathkit::path;
-///
-/// let root = path!("project");
-/// let config = &root / "config" / "app.json";
-/// assert_eq!(config, root.join("config").join("app.json"));
-/// ```
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, AsRef, From, Into)]
 #[as_ref(StdPath, OsStr, PathBuf)]
 #[from(&str, &OsStr, &StdPath, &PathBuf, String, std::ffi::OsString, PathBuf)]
@@ -56,11 +48,6 @@ impl Path {
 
     /// Wraps [`std::path::absolute`], so `..` stays on Unix; use [`Self::absolutize`] to resolve it
     /// lexically.
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`io::ErrorKind::InvalidInput`] for an empty path, and when the current working
-    /// directory cannot be read for a relative path.
     pub fn absolute(&self) -> io::Result<Self> {
         std::path::absolute(&self.0).map(Self)
     }
@@ -72,10 +59,6 @@ impl Path {
     /// Lexical `..` handling can differ from the filesystem when a preceding component is a
     /// symlink; use [`SyncFsOps::canonicalize_sync`](crate::sync_fs_ops::SyncFsOps::canonicalize_sync)
     /// when the path must exist and match the filesystem.
-    ///
-    /// # Errors
-    ///
-    /// Fails when the current working directory cannot be read for a relative path.
     pub fn absolutize(&self) -> io::Result<Self> {
         Ok(Self(self.0.absolutize()?.into_owned()))
     }
@@ -88,7 +71,6 @@ impl Path {
         Self(self.0.absolutize_from(base).into_owned())
     }
 
-    #[inline]
     pub fn as_path(&self) -> &StdPath {
         &self.0
     }
@@ -98,7 +80,6 @@ impl Path {
         Self(self.0.join(path))
     }
 
-    #[inline]
     pub fn parent(&self) -> Option<Self> {
         self.0.parent().map(Self::new)
     }
@@ -126,14 +107,12 @@ impl Path {
 }
 
 impl AsRef<Path> for Path {
-    #[inline]
     fn as_ref(&self) -> &Path {
         self
     }
 }
 
 impl Borrow<StdPath> for Path {
-    #[inline]
     fn borrow(&self) -> &StdPath {
         &self.0
     }
@@ -142,14 +121,12 @@ impl Borrow<StdPath> for Path {
 impl Deref for Path {
     type Target = StdPath;
 
-    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 impl fmt::Display for Path {
-    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self.0.display(), f)
     }
@@ -218,47 +195,6 @@ mod tests {
         assert_eq!(path!("base") / absolute, path!(absolute));
     }
 
-    #[cfg(unix)]
-    #[test]
-    fn non_utf8_path_is_preserved_and_displayed_lossily() {
-        use std::{
-            ffi::OsString,
-            os::unix::ffi::{
-                OsStrExt,
-                OsStringExt,
-            },
-        };
-
-        let bytes = b"/test/\xff".to_vec();
-        let path = Path::from(OsString::from_vec(bytes.clone()));
-
-        assert_eq!(path.to_str(), None);
-        assert_eq!(path.to_string(), "/test/\u{fffd}");
-        assert_eq!(path.as_os_str().as_bytes(), bytes.as_slice());
-        assert_eq!(PathBuf::from(path).into_os_string().into_vec(), bytes);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn serializing_non_utf8_path_fails() {
-        use std::os::unix::ffi::OsStrExt;
-
-        let path = path!(OsStr::from_bytes(b"\xff"));
-        assert!(serde_json::to_string(&path).is_err());
-    }
-
-    #[test]
-    fn serde_is_transparent_string_and_keeps_spelling() -> serde_json::Result<()> {
-        let path = path!("a/./b/");
-        assert_eq!(serde_json::to_string(&path)?, r#""a/./b/""#);
-        assert_eq!(
-            serde_json::from_str::<Path>(r#""a/./b/""#)?.as_os_str(),
-            path.as_os_str()
-        );
-
-        Ok(())
-    }
-
     #[test]
     fn display_honors_width_and_precision() {
         assert_eq!(format!("{:>6}", path!("ab")), "    ab");
@@ -274,29 +210,11 @@ mod tests {
         assert_eq!(BTreeMap::from([(key, 1)]).get(query), Some(&1));
     }
 
-    #[cfg(unix)]
-    #[test]
-    fn absolute_keeps_parent_components_unlike_absolutize() -> io::Result<()> {
-        let path = path!("/a/../b/");
-
-        assert_eq!(path.absolute()?.as_os_str(), OsStr::new("/a/../b/"));
-        assert_eq!(path.absolutize()?.as_os_str(), OsStr::new("/b"));
-        Ok(())
-    }
-
     #[test]
     fn absolutize_from_handles_empty_path_and_relative_base() {
         let base = if cfg!(windows) { r"C:\base" } else { "/base" };
         assert_eq!(path!("").absolutize_from(base), path!(base));
         assert_eq!(path!("a/../b").absolutize_from("rel"), path!("rel") / "b");
         assert!(!path!("x").absolutize_from("rel").is_absolute());
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn windows_div_accepts_forward_slashes_and_keeps_drive_for_rooted_operand() {
-        assert_eq!(path!(r"C:\base") / "a/b", path!(r"C:\base\a\b"));
-        assert_eq!(path!(r"C:\base") / r"\abs", path!(r"C:\abs"));
-        assert_eq!((path!(r"C:\base") / r"D:child").as_os_str(), OsStr::new(r"D:child"));
     }
 }

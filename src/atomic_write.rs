@@ -84,7 +84,6 @@ pub(crate) fn publish_noclobber(file: File, guard: TempGuard, dest: &StdPath) ->
     })
 }
 
-/// Syncs and closes `file`, then publishes the staged file at `dest` with `place`.
 fn publish(
     file: File,
     mut guard: TempGuard,
@@ -183,7 +182,6 @@ fn parent_or_current_dir(path: &StdPath) -> &StdPath {
         .unwrap_or_else(|| StdPath::new("."))
 }
 
-/// Runs `place`, then syncs `dest`'s directory on Unix.
 fn place_durably(
     source: &StdPath,
     dest: &StdPath,

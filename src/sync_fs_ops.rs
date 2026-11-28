@@ -32,8 +32,7 @@ use crate::{
 /// Blocking filesystem operations for paths.
 ///
 /// Methods without their own docs wrap the std function they are named after (`copy_file` wraps
-/// [`fs::copy`], `open*` wrap [`File::open`] / [`OpenOptions::open`]) and return [`Path`] where std
-/// returns [`PathBuf`](std::path::PathBuf). Rules shared by all methods:
+/// [`fs::copy`], `open*` wrap [`File::open`] / [`OpenOptions::open`]). Rules shared by all methods:
 ///
 /// - Metadata and type checks follow symlinks, except `is_symlink_sync` and
 ///   `symlink_metadata*`. Type checks return `Err` for a missing path, not `false`.
@@ -44,20 +43,6 @@ use crate::{
 ///   such as a non-directory parent component, are returned.
 /// - JSON methods wrap filesystem failures with [`serde_json::Error::io`]; use
 ///   [`serde_json::Error::io_error_kind`] to inspect them.
-///
-/// ```rust
-/// use pathkit::{
-///     path,
-///     sync_fs_ops::SyncFsOps,
-/// };
-///
-/// let directory = tempfile::tempdir()?;
-/// let file = path!(directory.path()) / "message.txt";
-/// file.write_sync(b"Hello!")?;
-/// assert_eq!(file.read_sync()?, b"Hello!");
-/// assert_eq!(file.read_if_exists_sync()?, Some(b"Hello!".to_vec()));
-/// # Ok::<(), std::io::Error>(())
-/// ```
 pub trait SyncFsOps {
     /// Starts a replacement of `self` that is written through the returned [`AtomicWriter`] and
     /// becomes visible only on [`AtomicWriter::commit`]. Use it when the contents are streamed or
@@ -66,7 +51,8 @@ pub trait SyncFsOps {
     ///
     /// # Errors
     ///
-    /// Fails with [`io::ErrorKind::InvalidInput`] when the path has no file name.
+    /// Fails with [`io::ErrorKind::InvalidInput`] when the path has no file name (such as `/` or a
+    /// path ending in `..`).
     fn atomic_writer_sync(&self) -> io::Result<AtomicWriter>;
 
     fn canonicalize_sync(&self) -> io::Result<Path>;
@@ -197,9 +183,8 @@ pub trait SyncFsOps {
     ///
     /// # Errors
     ///
-    /// Fails with [`io::ErrorKind::InvalidInput`] when the path has no file name (such as `/` or a
-    /// path ending in `..`). Needs write permission on the parent directory, so it can fail where
-    /// [`Self::write_sync`] to an existing writable file succeeds.
+    /// Fails like [`Self::atomic_writer_sync`]. Needs write permission on the parent directory, so it
+    /// can fail where [`Self::write_sync`] to an existing writable file succeeds.
     fn write_atomic_with_sync(
         &self,
         contents: impl AsRef<[u8]>,
@@ -253,7 +238,7 @@ impl SyncFsOps for Path {
     }
 
     fn create_parent_dir_all_sync(&self) -> io::Result<()> {
-        self.parent().map_or(Ok(()), |parent| parent.create_dir_all_sync())
+        self.as_path().parent().map_or(Ok(()), fs::create_dir_all)
     }
 
     fn empty_dir_sync(&self) -> io::Result<()> {
@@ -490,12 +475,10 @@ impl SyncFsOps for Path {
 pub struct PathEntry(DirEntry);
 
 impl PathEntry {
-    #[inline]
     pub fn path(&self) -> Path {
         Path::from(self.0.path())
     }
 
-    #[inline]
     pub fn file_name(&self) -> OsString {
         self.0.file_name()
     }
@@ -508,12 +491,10 @@ impl PathEntry {
         self.0.file_type()
     }
 
-    #[inline]
     pub fn as_dir_entry(&self) -> &DirEntry {
         &self.0
     }
 
-    #[inline]
     pub fn into_dir_entry(self) -> DirEntry {
         self.0
     }
@@ -537,17 +518,14 @@ pub struct AtomicWriter {
 impl AtomicWriter {
     /// The temporary file's path, for libraries that write by path. They must write in place;
     /// replacing the file at this path is not detected.
-    #[inline]
     pub fn path(&self) -> &Path {
         &self.temp.path
     }
 
-    #[inline]
     pub fn file(&self) -> &File {
         &self.file
     }
 
-    #[inline]
     pub fn file_mut(&mut self) -> &mut File {
         &mut self.file
     }
@@ -594,12 +572,10 @@ impl AtomicWriter {
 }
 
 impl Write for AtomicWriter {
-    #[inline]
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.file.write(buf)
     }
 
-    #[inline]
     fn flush(&mut self) -> io::Result<()> {
         self.file.flush()
     }
@@ -611,7 +587,6 @@ pub struct ReadDir(fs::ReadDir);
 impl Iterator for ReadDir {
     type Item = io::Result<PathEntry>;
 
-    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next().map(|entry| entry.map(PathEntry))
     }

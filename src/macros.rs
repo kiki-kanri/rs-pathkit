@@ -12,14 +12,12 @@
 ///     path,
 /// };
 ///
-/// let source = String::from("config.json");
-/// let direct = path!(&source);
+/// let file = "config.json";
+/// let direct = path!(file);
 /// assert_eq!(direct, Path::new("config.json"));
-/// assert_eq!(source, "config.json");
 ///
 /// let name = "config";
-/// let formatted = path!("{name}.{}", "json");
-/// assert_eq!(formatted, direct);
+/// assert_eq!(path!("{name}.{}", "json"), direct);
 /// assert_eq!(path!("{{config}}.json"), Path::new("{config}.json"));
 /// ```
 #[macro_export]

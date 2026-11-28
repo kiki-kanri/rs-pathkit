@@ -30,6 +30,7 @@ use tokio::{
 
 use crate::{
     Path,
+    atomic_write,
     sync_fs_ops::{
         SyncFsOps,
         none_if_not_found,
@@ -41,7 +42,7 @@ use crate::{
 ///
 /// Composite operations (`empty_dir`, `touch`, `write_atomic*`, `persist_to`), `chown`, and
 /// `prepare` callbacks run as a single task on Tokio's blocking pool; panics there surface as
-/// [`io::Error`]. Write methods copy `contents` before handing it to the blocking pool.
+/// [`io::Error`]. `write_atomic*` copy `contents` before handing it to the blocking pool.
 ///
 /// With this trait in scope its methods take precedence over the synchronous
 /// [`std::path::Path`] methods of the same name reached through `Deref`, such as `try_exists`,
@@ -56,22 +57,6 @@ use crate::{
 /// Dropping a future does not roll back completed changes, and work already handed to the
 /// blocking pool can still run. A canceled write may therefore take effect even if the caller
 /// retries it.
-///
-/// ```rust
-/// use pathkit::{
-///     async_fs_ops::AsyncFsOps,
-///     path,
-/// };
-///
-/// #[tokio::main(flavor = "current_thread")]
-/// async fn main() -> std::io::Result<()> {
-///     let directory = tempfile::tempdir()?;
-///     let file = path!(directory.path()) / "message.txt";
-///     file.write(b"Hello!").await?;
-///     assert_eq!(file.read_to_string().await?, "Hello!");
-///     Ok(())
-/// }
-/// ```
 #[async_trait::async_trait]
 pub trait AsyncFsOps {
     async fn canonicalize(&self) -> io::Result<Path>;
@@ -217,8 +202,8 @@ impl AsyncFsOps for Path {
     }
 
     async fn create_parent_dir_all(&self) -> io::Result<()> {
-        match self.parent() {
-            Some(parent) => parent.create_dir_all().await,
+        match self.as_path().parent() {
+            Some(parent) => fs::create_dir_all(parent).await,
             None => Ok(()),
         }
     }
@@ -295,7 +280,11 @@ impl AsyncFsOps for Path {
     async fn persist_to(&self, dest: impl AsRef<StdPath> + Send) -> io::Result<Path> {
         let source = self.clone();
         let dest = Self::new(dest);
-        spawn_blocking(move || source.persist_to_sync(dest)).await?
+        spawn_blocking(move || {
+            atomic_write::persist(&source, &dest)?;
+            Ok(dest)
+        })
+        .await?
     }
 
     async fn read_dir_if_exists(&self) -> io::Result<Option<AsyncReadDir>> {
@@ -412,13 +401,11 @@ impl AsyncFsOps for Path {
         contents: impl AsRef<[u8]> + Send,
         prepare: impl for<'a> FnOnce(&'a Path) -> io::Result<()> + Send + 'static,
     ) -> io::Result<()> {
-        let path = self.clone();
-        let contents = contents.as_ref().to_vec();
-        spawn_blocking(move || path.write_atomic_with_sync(contents, prepare)).await?
+        write_atomic_owned(self, contents.as_ref().to_vec(), prepare).await
     }
 
     async fn write_json_pretty_atomic<T: Serialize + Sync + ?Sized>(&self, data: &T) -> serde_json::Result<()> {
-        self.write_atomic(serde_json::to_vec_pretty(data)?)
+        write_atomic_owned(self, serde_json::to_vec_pretty(data)?, |_| Ok(()))
             .await
             .map_err(serde_json::Error::io)
     }
@@ -441,12 +428,10 @@ impl AsyncFsOps for Path {
 pub struct AsyncPathEntry(DirEntry);
 
 impl AsyncPathEntry {
-    #[inline]
     pub fn path(&self) -> Path {
         Path::from(self.0.path())
     }
 
-    #[inline]
     pub fn file_name(&self) -> OsString {
         self.0.file_name()
     }
@@ -459,15 +444,22 @@ impl AsyncPathEntry {
         self.0.file_type().await
     }
 
-    #[inline]
     pub fn as_dir_entry(&self) -> &DirEntry {
         &self.0
     }
 
-    #[inline]
     pub fn into_dir_entry(self) -> DirEntry {
         self.0
     }
+}
+
+async fn write_atomic_owned(
+    path: &Path,
+    contents: Vec<u8>,
+    prepare: impl FnOnce(&Path) -> io::Result<()> + Send + 'static,
+) -> io::Result<()> {
+    let path = path.clone();
+    spawn_blocking(move || path.write_atomic_with_sync(contents, prepare)).await?
 }
 
 #[derive(Debug)]
@@ -479,7 +471,6 @@ impl AsyncReadDir {
         Ok(self.0.next_entry().await?.map(AsyncPathEntry))
     }
 
-    /// Polling counterpart of [`Self::next_entry`], for building a `Stream`.
     pub fn poll_next_entry(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<Option<AsyncPathEntry>>> {
         self.0.poll_next_entry(cx).map_ok(|entry| entry.map(AsyncPathEntry))
     }

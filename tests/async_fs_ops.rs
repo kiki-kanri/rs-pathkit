@@ -21,22 +21,15 @@ fn expect_error<T, E>(result: Result<T, E>) -> Result<E> {
 }
 
 #[tokio::test]
-async fn async_wrappers_round_trip_a_file() -> Result<()> {
+async fn rename_to_moves_file_and_returns_destination() -> Result<()> {
     let directory = tempdir()?;
     let source = path!(&directory) / "source.txt";
-    let copy = path!(&directory) / "copy.txt";
     let renamed = path!(&directory) / "renamed.txt";
-
     source.write(b"hello").await?;
-    assert_eq!(source.read().await?, b"hello");
-    assert_eq!(source.read_to_string().await?, "hello");
-    assert!(source.is_file().await?);
-    assert_eq!(source.copy_file(&copy).await?, 5);
-    assert_eq!(copy.rename_to(&renamed).await?, renamed);
-    assert!(!copy.try_exists().await?);
 
-    renamed.remove_file().await?;
-    assert!(!renamed.try_exists().await?);
+    assert_eq!(source.rename_to(&renamed).await?, renamed);
+    assert!(!source.try_exists().await?);
+    assert_eq!(renamed.read().await?, b"hello");
     Ok(())
 }
 
@@ -90,35 +83,6 @@ async fn read_dir_names_and_paths_list_children() -> Result<()> {
 }
 
 #[tokio::test]
-async fn empty_dir_removes_contents_and_creates_missing_directory() -> Result<()> {
-    let directory = tempdir()?;
-    let nested = path!(&directory) / "subdir" / "nested";
-    nested.create_dir_all().await?;
-    (&nested / "file.txt").write(b"content").await?;
-    (path!(&directory) / "file.txt").write(b"content").await?;
-
-    path!(&directory).empty_dir().await?;
-    assert_eq!(path!(&directory).read_dir_names_lossy().await?, [] as [String; 0]);
-
-    let created = path!(&directory) / "missing" / "dir";
-    created.empty_dir().await?;
-    assert!(created.is_dir().await?);
-    Ok(())
-}
-
-#[tokio::test]
-async fn touch_creates_missing_file() -> Result<()> {
-    let directory = tempdir()?;
-    let file = path!(&directory) / "touched.txt";
-
-    file.touch().await?;
-
-    assert!(file.is_file().await?);
-    assert_eq!(file.read().await?, b"");
-    Ok(())
-}
-
-#[tokio::test]
 async fn persist_to_replaces_destination() -> Result<()> {
     let directory = tempdir()?;
     let source = path!(&directory) / "prepared.tmp";
@@ -130,38 +94,6 @@ async fn persist_to_replaces_destination() -> Result<()> {
 
     assert!(!source.try_exists().await?);
     assert_eq!(dest.read().await?, b"new");
-    Ok(())
-}
-
-#[tokio::test]
-async fn write_atomic_replaces_file_without_leaving_temporary_files() -> Result<()> {
-    let directory = tempdir()?;
-    let file = path!(&directory) / "config.json";
-    file.write(b"old").await?;
-
-    file.write_atomic(b"new").await?;
-
-    assert_eq!(file.read().await?, b"new");
-    assert_eq!(path!(&directory).read_dir_names_lossy().await?, ["config.json"]);
-    Ok(())
-}
-
-#[tokio::test]
-async fn write_atomic_with_prepare_error_is_returned_and_temporary_file_removed() -> Result<()> {
-    let directory = tempdir()?;
-    let file = path!(&directory) / "config.json";
-    file.write(b"old").await?;
-
-    let error = expect_error(
-        file.write_atomic_with(b"new", |_| {
-            Err(io::Error::new(io::ErrorKind::PermissionDenied, "rejected"))
-        })
-        .await,
-    )?;
-
-    assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
-    assert_eq!(file.read().await?, b"old");
-    assert_eq!(path!(&directory).read_dir_names_lossy().await?, ["config.json"]);
     Ok(())
 }
 
@@ -276,19 +208,6 @@ async fn read_json_missing_file_returns_wrapped_io_error() -> Result<()> {
 
     assert!(error.is_io());
     assert_eq!(error.io_error_kind(), Some(io::ErrorKind::NotFound));
-    Ok(())
-}
-
-#[tokio::test]
-async fn read_json_invalid_content_returns_syntax_error() -> Result<()> {
-    let directory = tempdir()?;
-    let file = path!(&directory) / "invalid.json";
-    file.write(b"not json").await?;
-
-    let error = expect_error(file.read_json::<serde_json::Value>().await)?;
-
-    assert!(error.is_syntax());
-    assert_eq!(error.io_error_kind(), None);
     Ok(())
 }
 

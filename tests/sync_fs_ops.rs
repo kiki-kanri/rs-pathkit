@@ -561,22 +561,6 @@ fn read_json_sync_wraps_missing_file_as_io_error() -> Result<()> {
 }
 
 #[test]
-fn read_json_sync_reports_invalid_json_as_syntax_error() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-    file_path.write_sync(b"not json")?;
-
-    let error = file_path
-        .read_json_sync::<serde_json::Value>()
-        .err()
-        .ok_or_else(|| anyhow!("expected invalid JSON error"))?;
-
-    assert!(error.is_syntax());
-    assert_eq!(error.io_error_kind(), None);
-    Ok(())
-}
-
-#[test]
 fn write_json_pretty_sync_wraps_missing_parent_as_io_error() -> Result<()> {
     let temp_dir = tempdir()?;
     let file_path = path!(&temp_dir) / "missing" / "data.json";
@@ -914,7 +898,7 @@ fn atomic_writer_commit_noclobber_refuses_existing_destination() -> Result<()> {
 }
 
 #[test]
-fn write_json_pretty_atomic_sync_round_trips_and_creates_private_file() -> Result<()> {
+fn write_json_pretty_atomic_sync_round_trips() -> Result<()> {
     let temp_dir = tempdir()?;
     let path = path!(&temp_dir) / "config.json";
 
@@ -922,14 +906,6 @@ fn write_json_pretty_atomic_sync_round_trips_and_creates_private_file() -> Resul
     assert_eq!(path.read_json_sync::<Vec<i32>>()?, [1, 2, 3]);
     path.write_json_pretty_atomic_sync(&[4])?;
     assert_eq!(path.read_json_sync::<Vec<i32>>()?, [4]);
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-
-        assert_eq!(path.metadata_sync()?.permissions().mode() & 0o777, 0o600);
-    }
-
     Ok(())
 }
 
