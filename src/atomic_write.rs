@@ -22,27 +22,52 @@ use crate::Path;
 const TEMP_FILE_ATTEMPTS: u32 = 64;
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-/// Creates the temporary sibling for `dest`, already carrying an existing regular file's permission
-/// bits on Unix.
-pub(crate) fn stage(dest: &Path) -> io::Result<(File, TempGuard)> {
+/// Creates the temporary sibling for `dest`, plus the permission bits an existing regular file at
+/// `dest` has on Unix, to be applied with [`InheritedMode::apply`].
+pub(crate) fn stage(dest: &Path) -> io::Result<(File, TempGuard, Option<InheritedMode>)> {
     let (temp_path, file) = create_temp_sibling(dest)?;
     let guard = TempGuard {
         path: temp_path,
         armed: true,
     };
 
-    // Keep an existing regular file's permission bits instead of the temporary file's 0600; a
-    // symlink is replaced rather than followed, so its target's mode is not consulted.
+    // A symlink is replaced rather than followed, so its target's mode is not consulted.
     #[cfg(unix)]
-    if let Some(metadata) = crate::sync_fs_ops::none_if_not_found(fs::symlink_metadata(dest))?
-        && metadata.is_file()
-    {
-        use std::os::unix::fs::PermissionsExt;
+    let inherited = match crate::sync_fs_ops::none_if_not_found(fs::symlink_metadata(dest))? {
+        Some(metadata) if metadata.is_file() => {
+            use std::os::unix::fs::PermissionsExt;
 
-        file.set_permissions(fs::Permissions::from_mode(metadata.permissions().mode() & 0o777))?;
+            Some(InheritedMode {
+                created: file.metadata()?.permissions(),
+                inherited: fs::Permissions::from_mode(metadata.permissions().mode() & 0o777),
+            })
+        },
+        _ => None,
+    };
+
+    #[cfg(not(unix))]
+    let inherited = None;
+
+    Ok((file, guard, inherited))
+}
+
+/// Permission bits to carry over from the replaced file. Applied late, so a temporary file written
+/// by path stays writable even when the destination is read-only.
+#[derive(Debug)]
+pub(crate) struct InheritedMode {
+    created: fs::Permissions,
+    inherited: fs::Permissions,
+}
+
+impl InheritedMode {
+    /// Applies the inherited bits unless the caller already changed the temporary file's mode.
+    pub(crate) fn apply(self, file: &File) -> io::Result<()> {
+        if file.metadata()?.permissions() == self.created {
+            file.set_permissions(self.inherited)?;
+        }
+
+        Ok(())
     }
-
-    Ok((file, guard))
 }
 
 pub(crate) fn publish_replacing(file: File, guard: TempGuard, dest: &StdPath) -> io::Result<()> {
@@ -71,16 +96,12 @@ fn publish(
     drop(file);
     synced?;
 
-    // Open the directory first so a missing read permission fails before anything is published.
-    #[cfg(unix)]
-    let dest_dir = File::open(parent_or_current_dir(dest))?;
-    place(&guard.path, dest)?;
-
-    // Once published, the temporary name may be reused by another writer; never remove it again.
-    guard.armed = false;
-    #[cfg(unix)]
-    dest_dir.sync_all()?;
-    Ok(())
+    place_durably(&guard.path, dest, |temp, dest| {
+        place(temp, dest)?;
+        // Once published, the temporary name may be reused by another writer; never remove it again.
+        guard.armed = false;
+        Ok(())
+    })
 }
 
 pub(crate) fn persist(source: &StdPath, dest: &StdPath) -> io::Result<()> {
@@ -100,7 +121,7 @@ pub(crate) fn persist(source: &StdPath, dest: &StdPath) -> io::Result<()> {
 
     file.sync_all()?;
     drop(file);
-    replace_durably(source, dest)
+    place_durably(source, dest, rename_retrying)
 }
 
 /// Removes the temporary file on errors and unwinding unless disarmed.
@@ -162,11 +183,16 @@ fn parent_or_current_dir(path: &StdPath) -> &StdPath {
         .unwrap_or_else(|| StdPath::new("."))
 }
 
-fn replace_durably(source: &StdPath, dest: &StdPath) -> io::Result<()> {
+/// Runs `place`, then syncs `dest`'s directory on Unix.
+fn place_durably(
+    source: &StdPath,
+    dest: &StdPath,
+    place: impl FnOnce(&StdPath, &StdPath) -> io::Result<()>,
+) -> io::Result<()> {
     // Open the directory first so a missing read permission fails before anything is replaced.
     #[cfg(unix)]
     let dest_dir = File::open(parent_or_current_dir(dest))?;
-    rename_retrying(source, dest)?;
+    place(source, dest)?;
 
     #[cfg(unix)]
     dest_dir.sync_all()?;

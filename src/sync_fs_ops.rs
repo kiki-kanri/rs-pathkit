@@ -93,7 +93,6 @@ pub trait SyncFsOps {
 
     fn try_exists_sync(&self) -> io::Result<bool>;
 
-    /// Makes `self` a new hard link to `target`.
     fn hard_link_to_sync(&self, target: impl AsRef<StdPath>) -> io::Result<()>;
 
     #[cfg(unix)]
@@ -123,8 +122,8 @@ pub trait SyncFsOps {
     fn open_with_options_sync(&self, options: &OpenOptions) -> io::Result<File>;
 
     /// Syncs this regular file, renames it over `dest`, and on Unix syncs `dest`'s directory. Fails
-    /// with [`io::ErrorKind::InvalidInput`] for a symlink or other non-regular source, and instead
-    /// of copying when `dest` is on another filesystem. The file keeps its own permissions. On
+    /// with [`io::ErrorKind::InvalidInput`] for a symlink or other non-regular source; a `dest` on
+    /// another filesystem fails instead of being copied. The file keeps its own permissions. On
     /// Windows the source must be writable, and transient replace failures are retried as in
     /// [`Self::write_atomic_with_sync`].
     fn persist_to_sync(&self, dest: impl AsRef<StdPath>) -> io::Result<Path>;
@@ -155,7 +154,6 @@ pub trait SyncFsOps {
 
     fn remove_dir_sync(&self) -> io::Result<()>;
 
-    /// Returns whether a file was removed.
     fn remove_file_if_exists_sync(&self) -> io::Result<bool>;
 
     fn remove_file_sync(&self) -> io::Result<()>;
@@ -203,22 +201,21 @@ pub trait SyncFsOps {
         prepare: impl FnOnce(&Path) -> io::Result<()>,
     ) -> io::Result<()>;
 
-    /// Like [`Self::write_json_sync`], but replaces the file through [`Self::write_atomic_sync`].
-    fn write_json_atomic_sync<T: Serialize + ?Sized>(&self, data: &T) -> serde_json::Result<()>;
+    fn write_json_pretty_atomic_sync<T: Serialize + ?Sized>(&self, data: &T) -> serde_json::Result<()>;
 
-    /// Writes pretty-printed JSON.
-    fn write_json_sync<T: Serialize + ?Sized>(&self, data: &T) -> serde_json::Result<()>;
+    fn write_json_pretty_sync<T: Serialize + ?Sized>(&self, data: &T) -> serde_json::Result<()>;
 
     fn write_sync(&self, contents: impl AsRef<[u8]>) -> io::Result<()>;
 }
 
 impl SyncFsOps for Path {
     fn atomic_writer_sync(&self) -> io::Result<AtomicWriter> {
-        let (file, temp) = atomic_write::stage(self)?;
+        let (file, temp, inherited) = atomic_write::stage(self)?;
         Ok(AtomicWriter {
             file,
             dest: self.clone(),
             temp,
+            inherited,
         })
     }
 
@@ -457,17 +454,22 @@ impl SyncFsOps for Path {
         prepare: impl FnOnce(&Path) -> io::Result<()>,
     ) -> io::Result<()> {
         let mut writer = self.atomic_writer_sync()?;
+        // Apply the inherited mode first so `prepare` can still override it.
+        if let Some(mode) = writer.inherited.take() {
+            mode.apply(&writer.file)?;
+        }
+
         prepare(writer.path())?;
         writer.write_all(contents.as_ref())?;
         writer.commit()
     }
 
-    fn write_json_atomic_sync<T: Serialize + ?Sized>(&self, data: &T) -> serde_json::Result<()> {
+    fn write_json_pretty_atomic_sync<T: Serialize + ?Sized>(&self, data: &T) -> serde_json::Result<()> {
         self.write_atomic_sync(serde_json::to_vec_pretty(data)?)
             .map_err(serde_json::Error::io)
     }
 
-    fn write_json_sync<T: Serialize + ?Sized>(&self, data: &T) -> serde_json::Result<()> {
+    fn write_json_pretty_sync<T: Serialize + ?Sized>(&self, data: &T) -> serde_json::Result<()> {
         self.write_sync(serde_json::to_vec_pretty(data)?)
             .map_err(serde_json::Error::io)
     }
@@ -515,14 +517,16 @@ impl PathEntry {
 /// A pending replacement of a file, created by [`SyncFsOps::atomic_writer_sync`].
 ///
 /// Writes go to a temporary file next to the destination, created like the one used by
-/// [`SyncFsOps::write_atomic_with_sync`] (same permission rules). Dropping the writer without
-/// committing tries to remove the temporary file; readers only ever see the old contents or the
-/// complete new ones.
+/// [`SyncFsOps::write_atomic_with_sync`]. On Unix, an existing regular file's permission bits are
+/// applied at commit unless the temporary file's mode was changed, so a read-only destination does
+/// not block writing by path. Dropping the writer without committing tries to remove the temporary
+/// file; readers only ever see the old contents or the complete new ones.
 #[derive(Debug)]
 pub struct AtomicWriter {
     file: File,
     dest: Path,
     temp: atomic_write::TempGuard,
+    inherited: Option<atomic_write::InheritedMode>,
 }
 
 impl AtomicWriter {
@@ -551,7 +555,7 @@ impl AtomicWriter {
     /// The destination is unchanged when syncing the file or renaming fails. A failure to sync the
     /// parent directory is reported after the destination was already replaced.
     pub fn commit(self) -> io::Result<()> {
-        atomic_write::publish_replacing(self.file, self.temp, &self.dest)
+        self.finish(atomic_write::publish_replacing)
     }
 
     /// Like [`Self::commit`], but never replaces an existing destination. Publishes through a hard
@@ -561,7 +565,26 @@ impl AtomicWriter {
     ///
     /// Fails with [`io::ErrorKind::AlreadyExists`] when the destination exists.
     pub fn commit_noclobber(self) -> io::Result<()> {
-        atomic_write::publish_noclobber(self.file, self.temp, &self.dest)
+        self.finish(atomic_write::publish_noclobber)
+    }
+
+    fn finish(self, publish: fn(File, atomic_write::TempGuard, &StdPath) -> io::Result<()>) -> io::Result<()> {
+        let Self {
+            file,
+            dest,
+            temp,
+            inherited,
+        } = self;
+
+        if let Some(mode) = inherited
+            && let Err(error) = mode.apply(&file)
+        {
+            // Close before the guard removes the temporary file.
+            drop(file);
+            return Err(error);
+        }
+
+        publish(file, temp, &dest)
     }
 }
 

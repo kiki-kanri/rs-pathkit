@@ -291,7 +291,7 @@ async fn json_round_trips_unsized_values() -> Result<()> {
     let file = path!(&directory) / "data.json";
     let values = vec![1, 2, 3];
 
-    file.write_json(values.as_slice()).await?;
+    file.write_json_pretty(values.as_slice()).await?;
 
     assert_eq!(file.read_json::<Vec<i32>>().await?, values);
     Ok(())
@@ -323,11 +323,11 @@ async fn read_json_invalid_content_returns_syntax_error() -> Result<()> {
 }
 
 #[tokio::test]
-async fn write_json_missing_parent_returns_wrapped_io_error() -> Result<()> {
+async fn write_json_pretty_missing_parent_returns_wrapped_io_error() -> Result<()> {
     let directory = tempdir()?;
     let file = path!(&directory) / "missing" / "data.json";
 
-    let error = expect_error(file.write_json(&[1, 2, 3]).await)?;
+    let error = expect_error(file.write_json_pretty(&[1, 2, 3]).await)?;
 
     assert!(error.is_io());
     assert_eq!(error.io_error_kind(), Some(io::ErrorKind::NotFound));
@@ -440,11 +440,11 @@ async fn read_dir_if_exists_returns_none_for_missing_directory() -> Result<()> {
 }
 
 #[tokio::test]
-async fn write_json_atomic_round_trips() -> Result<()> {
+async fn write_json_pretty_atomic_round_trips() -> Result<()> {
     let directory = tempdir()?;
     let path = path!(&directory) / "config.json";
 
-    path.write_json_atomic(&[1, 2, 3]).await?;
+    path.write_json_pretty_atomic(&[1, 2, 3]).await?;
 
     assert_eq!(path.read_json::<Vec<i32>>().await?, [1, 2, 3]);
     assert_eq!(path!(&directory).read_dir_names_lossy().await?, ["config.json"]);

@@ -174,10 +174,10 @@ pub trait AsyncFsOps {
     ) -> io::Result<()>;
 
     /// Serialization runs on the polling thread.
-    async fn write_json_atomic<T: Serialize + Sync + ?Sized>(&self, data: &T) -> serde_json::Result<()>;
+    async fn write_json_pretty_atomic<T: Serialize + Sync + ?Sized>(&self, data: &T) -> serde_json::Result<()>;
 
     /// Serialization runs on the polling thread.
-    async fn write_json<T: Serialize + Sync + ?Sized>(&self, data: &T) -> serde_json::Result<()>;
+    async fn write_json_pretty<T: Serialize + Sync + ?Sized>(&self, data: &T) -> serde_json::Result<()>;
 
     async fn write(&self, contents: impl AsRef<[u8]> + Send) -> io::Result<()>;
 }
@@ -414,13 +414,13 @@ impl AsyncFsOps for Path {
         spawn_blocking(move || path.write_atomic_with_sync(contents, prepare)).await?
     }
 
-    async fn write_json_atomic<T: Serialize + Sync + ?Sized>(&self, data: &T) -> serde_json::Result<()> {
+    async fn write_json_pretty_atomic<T: Serialize + Sync + ?Sized>(&self, data: &T) -> serde_json::Result<()> {
         self.write_atomic(serde_json::to_vec_pretty(data)?)
             .await
             .map_err(serde_json::Error::io)
     }
 
-    async fn write_json<T: Serialize + Sync + ?Sized>(&self, data: &T) -> serde_json::Result<()> {
+    async fn write_json_pretty<T: Serialize + Sync + ?Sized>(&self, data: &T) -> serde_json::Result<()> {
         self.write(serde_json::to_vec_pretty(data)?)
             .await
             .map_err(serde_json::Error::io)

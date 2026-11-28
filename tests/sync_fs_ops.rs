@@ -663,7 +663,7 @@ fn json_round_trips_through_unsized_value() -> Result<()> {
         },
     ];
 
-    file.write_json_sync(&original[..])?;
+    file.write_json_pretty_sync(&original[..])?;
 
     let loaded: Vec<TestData> = file.read_json_sync()?;
     assert_eq!(loaded, original);
@@ -702,12 +702,12 @@ fn read_json_sync_reports_invalid_json_as_syntax_error() -> Result<()> {
 }
 
 #[test]
-fn write_json_sync_wraps_missing_parent_as_io_error() -> Result<()> {
+fn write_json_pretty_sync_wraps_missing_parent_as_io_error() -> Result<()> {
     let temp_dir = tempdir()?;
     let file_path = path!(&temp_dir) / "missing" / "data.json";
 
     let error = file_path
-        .write_json_sync(&[1, 2, 3])
+        .write_json_pretty_sync(&[1, 2, 3])
         .err()
         .ok_or_else(|| anyhow!("expected missing parent error"))?;
 
@@ -1053,13 +1053,13 @@ fn atomic_writer_commit_noclobber_refuses_existing_destination() -> Result<()> {
 }
 
 #[test]
-fn write_json_atomic_sync_round_trips_and_creates_private_file() -> Result<()> {
+fn write_json_pretty_atomic_sync_round_trips_and_creates_private_file() -> Result<()> {
     let temp_dir = tempdir()?;
     let path = path!(&temp_dir) / "config.json";
 
-    path.write_json_atomic_sync(&[1, 2, 3])?;
+    path.write_json_pretty_atomic_sync(&[1, 2, 3])?;
     assert_eq!(path.read_json_sync::<Vec<i32>>()?, [1, 2, 3]);
-    path.write_json_atomic_sync(&[4])?;
+    path.write_json_pretty_atomic_sync(&[4])?;
     assert_eq!(path.read_json_sync::<Vec<i32>>()?, [4]);
 
     #[cfg(unix)]
@@ -1069,5 +1069,42 @@ fn write_json_atomic_sync_round_trips_and_creates_private_file() -> Result<()> {
         assert_eq!(path.metadata_sync()?.permissions().mode() & 0o777, 0o600);
     }
 
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn atomic_writer_keeps_temp_writable_by_path_and_applies_read_only_mode_at_commit() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp_dir = tempdir()?;
+    let dest = path!(&temp_dir) / "secret";
+    dest.write_sync(b"old")?;
+    dest.chmod_sync(0o400)?;
+
+    let writer = dest.atomic_writer_sync()?;
+    writer.path().write_sync(b"new")?;
+    writer.commit()?;
+
+    assert_eq!(dest.read_sync()?, b"new");
+    assert_eq!(dest.metadata_sync()?.permissions().mode() & 0o777, 0o400);
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn atomic_writer_keeps_mode_set_by_the_caller() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp_dir = tempdir()?;
+    let dest = path!(&temp_dir) / "config";
+    dest.write_sync(b"old")?;
+    dest.chmod_sync(0o644)?;
+
+    let writer = dest.atomic_writer_sync()?;
+    writer.path().chmod_sync(0o640)?;
+    writer.commit()?;
+
+    assert_eq!(dest.metadata_sync()?.permissions().mode() & 0o777, 0o640);
     Ok(())
 }

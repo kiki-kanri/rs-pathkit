@@ -24,8 +24,7 @@ use serde::{
     Serialize,
 };
 
-/// An owned filesystem path; filesystem operations live in [`crate::sync_fs_ops`] and, with
-/// `async-fs-ops`, `async_fs_ops`.
+/// An owned filesystem path.
 ///
 /// Dereferences to [`std::path::Path`]; inherent methods that share a name with a std method
 /// shadow it and return an owned [`Path`]. Equality, hashing, and ordering follow [`PathBuf`], not
@@ -45,7 +44,7 @@ use serde::{
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, AsRef, From, Into)]
 #[as_ref(StdPath, OsStr, PathBuf)]
-#[from(&str, String, std::ffi::OsString, PathBuf)]
+#[from(&str, &OsStr, &StdPath, &PathBuf, String, std::ffi::OsString, PathBuf)]
 #[serde(transparent)]
 pub struct Path(PathBuf);
 
@@ -173,20 +172,6 @@ impl<P: AsRef<StdPath>> Div<P> for &Path {
     #[inline]
     fn div(self, rhs: P) -> Path {
         self.join(rhs)
-    }
-}
-
-impl From<&StdPath> for Path {
-    #[inline]
-    fn from(path: &StdPath) -> Self {
-        Self(path.to_path_buf())
-    }
-}
-
-impl From<&PathBuf> for Path {
-    #[inline]
-    fn from(path: &PathBuf) -> Self {
-        Self(path.clone())
     }
 }
 
