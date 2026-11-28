@@ -1,5 +1,29 @@
 # Changelog
 
+## v4.0.1
+
+[compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v4.0.0...v4.0.1)
+
+### 💅 Refactors
+
+- **path:** Drop `#[inline]` from generic functions ([41c71eb](https://github.com/kiki-kanri/rs-pathkit/commit/41c71eb))
+
+### 📖 Documentation
+
+- Add README template ([8043c55](https://github.com/kiki-kanri/rs-pathkit/commit/8043c55))
+- Fold platform limits into the README summary ([68179ad](https://github.com/kiki-kanri/rs-pathkit/commit/68179ad))
+- Tighten rustdoc contracts ([28c9d18](https://github.com/kiki-kanri/rs-pathkit/commit/28c9d18))
+- **readme:** Describe the `async-fs-ops` feature as the whole module and note the Tokio runtime requirement ([5dd9575](https://github.com/kiki-kanri/rs-pathkit/commit/5dd9575))
+- Drop the crate-level features list duplicated by the README ([2a86213](https://github.com/kiki-kanri/rs-pathkit/commit/2a86213))
+
+### ✅ Tests
+
+- Consolidate and prune fs-ops and path tests ([6913692](https://github.com/kiki-kanri/rs-pathkit/commit/6913692))
+
+### ❤️ Contributors
+
+- Kiki-kanri
+
 ## v4.0.0
 
 [compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v3.1.0...v4.0.0)
