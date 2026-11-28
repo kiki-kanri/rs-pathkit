@@ -16,14 +16,6 @@
 //! assert_eq!(file.read_to_string_sync()?, "Hello!");
 //! # Ok::<(), std::io::Error>(())
 //! ```
-//!
-//! # Features
-//!
-//! No optional feature is enabled by default; serde support and synchronous operations are always
-//! available.
-//!
-//! - `async-fs-ops`: the `async_fs_ops` module, backed by Tokio; calls need a Tokio runtime.
-//! - `full`: every optional feature.
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
