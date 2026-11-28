@@ -1,5 +1,21 @@
 # Changelog
 
+## v4.0.2
+
+[compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v4.0.1...v4.0.2)
+
+### 💅 Refactors
+
+- Trim docs and tests to non-obvious contracts and drop redundant copies ([31ddd5e](https://github.com/kiki-kanri/rs-pathkit/commit/31ddd5e))
+
+### ✅ Tests
+
+- **path:** Scope the `OsString` import to the Unix-only test ([a3a932b](https://github.com/kiki-kanri/rs-pathkit/commit/a3a932b))
+
+### ❤️ Contributors
+
+- Kiki-kanri
+
 ## v4.0.1
 
 [compare changes](https://github.com/kiki-kanri/rs-pathkit/compare/v4.0.0...v4.0.1)
