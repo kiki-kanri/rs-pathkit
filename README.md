@@ -6,7 +6,7 @@
 [![codecov][codecov-src]][codecov-href]
 [![License][license-src]][license-href]
 
-{{One sentence: what the crate provides and its main differentiator.}}
+{{One sentence: what the crate provides and its main differentiator, plus any crate-wide platform limit (e.g. "Unix only").}}
 
 - [✨ Release Notes](./CHANGELOG.md)
 
@@ -25,11 +25,6 @@ No features are enabled by default.
 | --- | --- |
 | `full` | Every feature below |
 | `{{feature}}` | {{One line: what it adds}} |
-
-<!-- Optional: only when behavior differs by platform or a platform is unsupported. -->
-## Platform Support
-
-{{e.g. Unix and Windows; `{{feature}}` is Unix only.}}
 
 ## License
 
