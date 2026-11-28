@@ -1,10 +1,6 @@
 use std::{
     fs,
     io,
-    io::{
-        Read,
-        Write,
-    },
     sync::Barrier,
     thread,
 };
@@ -14,9 +10,11 @@ use anyhow::{
     anyhow,
 };
 use pathkit::{
-    Path,
-    SyncFsOps,
     path,
+    sync_fs_ops::{
+        PathEntry,
+        SyncFsOps,
+    },
 };
 use serde::{
     Deserialize,
@@ -27,458 +25,365 @@ use tempfile::{
     tempdir,
 };
 
-// Test canonicalize_sync
+/// A path whose parent component is a regular file, so every lookup fails with something other
+/// than `NotFound`.
+#[cfg(unix)]
+fn path_below_regular_file(directory: &pathkit::Path) -> Result<pathkit::Path> {
+    let file = directory / "file.txt";
+    file.write_sync(b"content")?;
+    Ok(&file / "child")
+}
+
 #[test]
-fn test_canonicalize_sync() -> Result<()> {
+fn copy_hard_link_to_and_rename_preserve_file_contents() -> Result<()> {
     let temp_dir = tempdir()?;
-    let original = path!(&temp_dir) / ".";
+    let source = path!(&temp_dir) / "a" / "b" / "source.txt";
 
-    let canonical: Path = original.canonicalize_sync()?;
-    assert!(canonical.is_absolute());
-    assert_eq!(canonical.as_path(), fs::canonicalize(&original)?);
+    source.create_parent_dir_all_sync()?;
+    source.write_sync(b"payload")?;
+    let copy = path!(&temp_dir) / "copy.txt";
+    assert_eq!(source.copy_file_sync(&copy)?, 7);
+    let linked = path!(&temp_dir) / "hard-link.txt";
+    linked.hard_link_to_sync(&copy)?;
+    let moved = linked.rename_to_sync(path!(&temp_dir) / "moved.txt")?;
+
+    assert!(!linked.try_exists_sync()?);
+    assert!(moved.is_file_sync()?);
+    assert_eq!(moved.read_to_string_sync()?, "payload");
     Ok(())
 }
 
-// Test exists_sync
-#[test]
-fn test_exists_sync() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-
-    assert!(file_path.exists_sync()?);
-    Ok(())
-}
-
-#[test]
-fn test_exists_sync_false() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let path = path!(&temp_dir) / "non_existent_file.txt";
-
-    assert!(!path.exists_sync()?);
-    Ok(())
-}
-
-// Test is_file_sync
-#[test]
-fn test_is_file_sync() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-
-    assert!(file_path.is_file_sync()?);
-    Ok(())
-}
-
-#[test]
-fn test_is_file_sync_false() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let dir_path = path!(&temp_dir);
-
-    assert!(!dir_path.is_file_sync()?);
-    Ok(())
-}
-
-// Test is_dir_sync
-#[test]
-fn test_is_dir_sync() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let dir_path = path!(&temp_dir);
-
-    assert!(dir_path.is_dir_sync()?);
-    Ok(())
-}
-
-#[test]
-fn test_is_dir_sync_false() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-
-    assert!(!file_path.is_dir_sync()?);
-    Ok(())
-}
-
-// Test is_symlink_sync
 #[cfg(unix)]
 #[test]
-fn test_is_symlink_sync() -> Result<()> {
+fn symlink_to_stores_target_as_given_and_is_reported_as_symlink() -> Result<()> {
     let temp_dir = tempdir()?;
-    let target = path!(&temp_dir) / "target.txt";
-    fs::write(&target, "test")?;
-
+    let target = path!(&temp_dir) / "missing.txt";
     let link = path!(&temp_dir) / "link.txt";
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::symlink;
 
-        symlink(&target, &link)?;
-    }
+    link.symlink_to_sync(&target)?;
 
     assert!(link.is_symlink_sync()?);
+    assert_eq!(link.read_link_sync()?, target);
     Ok(())
 }
 
-// Test metadata_sync
+#[cfg(unix)]
 #[test]
-fn test_metadata_sync() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
+fn chown_sync_with_none_keeps_the_other_id() -> Result<()> {
+    use std::os::unix::fs::MetadataExt;
 
-    let metadata = file_path.metadata_sync()?;
+    let temp_file = NamedTempFile::new()?;
+    let file = path!(&temp_file);
+    let metadata = file.metadata_sync()?;
+    let (uid, gid) = (metadata.uid(), metadata.gid());
+
+    file.chown_sync(Some(uid), None)?;
+    file.chown_sync(None, Some(gid))?;
+    file.chown_sync(None, None)?;
+
+    let metadata = file.metadata_sync()?;
+    assert_eq!((metadata.uid(), metadata.gid()), (uid, gid));
+    Ok(())
+}
+
+#[test]
+fn read_if_exists_sync_returns_none_only_for_missing_file() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let file = path!(&temp_dir) / "file.txt";
+
+    assert_eq!(file.read_if_exists_sync()?, None);
+    file.write_sync(b"content")?;
+    assert_eq!(file.read_if_exists_sync()?, Some(b"content".to_vec()));
+    assert!(path!(&temp_dir).read_if_exists_sync().is_err());
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn read_if_exists_sync_propagates_errors_other_than_not_found() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path_below_regular_file(&path!(&temp_dir))?;
+
+    let error = path
+        .read_if_exists_sync()
+        .err()
+        .ok_or_else(|| anyhow!("expected an error"))?;
+
+    assert_eq!(error.kind(), io::ErrorKind::NotADirectory);
+    Ok(())
+}
+
+#[test]
+fn read_to_string_if_exists_sync_returns_none_only_for_missing_file() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let file = path!(&temp_dir) / "file.txt";
+
+    assert_eq!(file.read_to_string_if_exists_sync()?, None);
+    file.write_sync("content")?;
+    assert_eq!(file.read_to_string_if_exists_sync()?, Some("content".to_owned()));
+
+    file.write_sync([0xff, 0xfe])?;
+    let error = file
+        .read_to_string_if_exists_sync()
+        .err()
+        .ok_or_else(|| anyhow!("expected invalid UTF-8 error"))?;
+
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn read_to_string_if_exists_sync_propagates_errors_other_than_not_found() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path_below_regular_file(&path!(&temp_dir))?;
+
+    let error = path
+        .read_to_string_if_exists_sync()
+        .err()
+        .ok_or_else(|| anyhow!("expected an error"))?;
+
+    assert_eq!(error.kind(), io::ErrorKind::NotADirectory);
+    Ok(())
+}
+
+#[test]
+fn remove_file_if_exists_sync_reports_whether_a_file_was_removed() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let file = path!(&temp_dir) / "file.txt";
+
+    assert!(!file.remove_file_if_exists_sync()?);
+    file.write_sync(b"content")?;
+    assert!(file.remove_file_if_exists_sync()?);
+    assert!(!file.try_exists_sync()?);
+    assert!(!file.remove_file_if_exists_sync()?);
+    Ok(())
+}
+
+#[test]
+fn remove_file_if_exists_sync_does_not_hide_failure_to_remove_a_directory() -> Result<()> {
+    let temp_dir = tempdir()?;
+
+    assert!(path!(&temp_dir).remove_file_if_exists_sync().is_err());
+    assert!(path!(&temp_dir).is_dir_sync()?);
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn remove_file_if_exists_sync_propagates_errors_other_than_not_found() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path_below_regular_file(&path!(&temp_dir))?;
+
+    let error = path
+        .remove_file_if_exists_sync()
+        .err()
+        .ok_or_else(|| anyhow!("expected an error"))?;
+
+    assert_eq!(error.kind(), io::ErrorKind::NotADirectory);
+    Ok(())
+}
+
+#[test]
+fn metadata_if_exists_sync_returns_none_only_for_missing_path() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let file = path!(&temp_dir) / "file.txt";
+
+    assert!(file.metadata_if_exists_sync()?.is_none());
+    file.write_sync(b"content")?;
+    let metadata = file
+        .metadata_if_exists_sync()?
+        .ok_or_else(|| anyhow!("expected metadata"))?;
+
+    assert!(metadata.is_file());
+    assert_eq!(metadata.len(), 7);
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn metadata_if_exists_sync_follows_symlinks_so_dangling_link_is_none() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let link = path!(&temp_dir) / "link";
+    link.symlink_to_sync(path!(&temp_dir) / "missing")?;
+
+    assert!(link.metadata_if_exists_sync()?.is_none());
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn metadata_if_exists_sync_propagates_errors_other_than_not_found() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path_below_regular_file(&path!(&temp_dir))?;
+
+    let error = path
+        .metadata_if_exists_sync()
+        .err()
+        .ok_or_else(|| anyhow!("expected an error"))?;
+
+    assert_eq!(error.kind(), io::ErrorKind::NotADirectory);
+    Ok(())
+}
+
+#[test]
+fn symlink_metadata_if_exists_sync_returns_none_only_for_missing_path() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let file = path!(&temp_dir) / "file.txt";
+
+    assert!(file.symlink_metadata_if_exists_sync()?.is_none());
+    file.write_sync(b"content")?;
+    let metadata = file
+        .symlink_metadata_if_exists_sync()?
+        .ok_or_else(|| anyhow!("expected metadata"))?;
+
     assert!(metadata.is_file());
     Ok(())
 }
 
-// Test read_sync and write_sync
+#[cfg(unix)]
 #[test]
-fn test_read_write_sync() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-
-    let test_content = b"Hello, World!";
-    file_path.write_sync(test_content)?;
-
-    let read_content = file_path.read_sync()?;
-    assert_eq!(read_content, test_content);
-    Ok(())
-}
-
-// Test read_to_string_sync
-#[test]
-fn test_read_to_string_sync() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-
-    let test_content = "Hello, World!";
-    file_path.write_sync(test_content)?;
-
-    let read_content = file_path.read_to_string_sync()?;
-    assert_eq!(read_content, test_content);
-    Ok(())
-}
-
-// Test create_dir_sync
-#[test]
-fn test_create_dir_sync() -> Result<()> {
+fn symlink_metadata_if_exists_sync_returns_some_for_dangling_symlink() -> Result<()> {
     let temp_dir = tempdir()?;
-    let dir_path = path!(&temp_dir) / "new_dir";
+    let link = path!(&temp_dir) / "link";
+    link.symlink_to_sync(path!(&temp_dir) / "missing")?;
 
-    dir_path.create_dir_sync()?;
+    let metadata = link
+        .symlink_metadata_if_exists_sync()?
+        .ok_or_else(|| anyhow!("expected metadata for the link itself"))?;
 
-    assert!(dir_path.is_dir_sync()?);
+    assert!(metadata.file_type().is_symlink());
     Ok(())
 }
 
-// Test create_dir_all_sync
+#[cfg(unix)]
 #[test]
-fn test_create_dir_all_sync() -> Result<()> {
+fn symlink_metadata_if_exists_sync_propagates_errors_other_than_not_found() -> Result<()> {
     let temp_dir = tempdir()?;
-    let dir_path = path!(&temp_dir) / "parent" / "child" / "grandchild";
-
-    dir_path.create_dir_all_sync()?;
-
-    assert!(dir_path.is_dir_sync()?);
-    Ok(())
-}
-
-// Test remove_dir_sync
-#[test]
-fn test_remove_dir_sync() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let dir_path = path!(&temp_dir) / "to_remove";
-    fs::create_dir(&dir_path)?;
-
-    assert!(dir_path.exists_sync()?);
-    dir_path.remove_dir_sync()?;
-    assert!(!dir_path.exists_sync()?);
-    Ok(())
-}
-
-// Test remove_file_sync
-#[test]
-fn test_remove_file_sync() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-
-    assert!(file_path.exists_sync()?);
-    file_path.remove_file_sync()?;
-    assert!(!file_path.exists_sync()?);
-    Ok(())
-}
-
-// Test remove_dir_all_sync
-#[test]
-fn test_remove_dir_all_sync() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let parent = path!(&temp_dir) / "parent";
-    fs::create_dir(&parent)?;
-    fs::write(&parent / "file1.txt", "content1")?;
-    fs::write(&parent / "file2.txt", "content2")?;
-
-    assert!(parent.exists_sync()?);
-    parent.remove_dir_all_sync()?;
-    assert!(!parent.exists_sync()?);
-    Ok(())
-}
-
-// Test get_file_size_sync
-#[test]
-fn test_get_file_size_sync() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-
-    let test_content = b"Hello, World!";
-    file_path.write_sync(test_content)?;
-
-    let size = file_path.get_file_size_sync()?;
-    assert_eq!(size, test_content.len() as u64);
-    Ok(())
-}
-
-// Test truncate_sync
-#[test]
-fn test_truncate_sync() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-
-    let test_content = b"Hello, World!";
-    file_path.write_sync(test_content)?;
-
-    // Truncate to 5 bytes
-    file_path.truncate_sync(Some(5))?;
-
-    let size = file_path.get_file_size_sync()?;
-    assert_eq!(size, 5);
-    Ok(())
-}
-
-// Test write_atomic_sync
-#[test]
-fn test_write_atomic_sync_replaces_existing_file() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let path = path!(&temp_dir) / "config.json";
-    path.write_sync(b"old")?;
-
-    path.write_atomic_sync(b"new")?;
-
-    assert_eq!(path.read_sync()?, b"new");
-    assert_eq!(path!(&temp_dir).read_dir_names_sync()?, ["config.json"]);
-    Ok(())
-}
-
-#[test]
-fn test_write_atomic_with_sync_prepares_empty_temporary_file() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let path = path!(&temp_dir) / "secret.key";
-
-    path.write_atomic_with_sync(b"secret", |temp_path| {
-        assert_ne!(temp_path, &path);
-        assert_eq!(temp_path.parent(), path.parent());
-        assert_eq!(temp_path.get_file_size_sync()?, 0);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-
-            assert_eq!(temp_path.metadata_sync()?.permissions().mode() & 0o077, 0);
-            temp_path.chmod_sync(0o640)?;
-        }
-
-        Ok(())
-    })?;
-
-    assert_eq!(path.read_sync()?, b"secret");
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-
-        assert_eq!(path.metadata_sync()?.permissions().mode() & 0o777, 0o640);
-    }
-
-    Ok(())
-}
-
-#[test]
-fn test_write_atomic_with_sync_removes_temporary_file_on_failure() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let path = path!(&temp_dir) / "config.json";
-    path.write_sync(b"old")?;
+    let path = path_below_regular_file(&path!(&temp_dir))?;
 
     let error = path
-        .write_atomic_with_sync(b"new", |_| Err(io::Error::other("prepare failed")))
+        .symlink_metadata_if_exists_sync()
         .err()
-        .ok_or_else(|| anyhow!("expected prepare error"))?;
+        .ok_or_else(|| anyhow!("expected an error"))?;
 
-    assert_eq!(error.kind(), io::ErrorKind::Other);
-    assert_eq!(path.read_sync()?, b"old");
-    assert_eq!(path!(&temp_dir).read_dir_names_sync()?, ["config.json"]);
+    assert_eq!(error.kind(), io::ErrorKind::NotADirectory);
     Ok(())
 }
 
 #[test]
-fn test_write_atomic_with_sync_removes_temporary_file_on_panic() -> Result<()> {
-    use std::panic::{
-        AssertUnwindSafe,
-        catch_unwind,
+fn touch_sync_creates_missing_file_without_creating_parents() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let file = path!(&temp_dir) / "touched.txt";
+
+    file.touch_sync()?;
+
+    assert!(file.is_file_sync()?);
+    assert_eq!(file.metadata_sync()?.len(), 0);
+    assert!((path!(&temp_dir) / "missing" / "touched.txt").touch_sync().is_err());
+    Ok(())
+}
+
+#[test]
+fn touch_sync_updates_mtime_without_truncating() -> Result<()> {
+    use std::{
+        fs::File,
+        time::SystemTime,
     };
 
-    let temp_dir = tempdir()?;
-    let path = path!(&temp_dir) / "config.json";
+    let temp_file = NamedTempFile::new()?;
+    let path = path!(&temp_file);
+    path.write_sync(b"preserved")?;
+    File::options()
+        .write(true)
+        .open(&path)?
+        .set_modified(SystemTime::UNIX_EPOCH)?;
 
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        path.write_atomic_with_sync(b"new", |_| panic!("prepare panicked"))
-    }));
+    path.touch_sync()?;
 
-    assert!(result.is_err());
-    assert_eq!(path!(&temp_dir).read_dir_names_sync()?.len(), 0);
-    Ok(())
-}
-
-#[cfg(unix)]
-#[test]
-fn test_write_atomic_sync_accepts_maximum_length_file_name() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let path = path!(&temp_dir) / "a".repeat(255);
-
-    path.write_atomic_sync(b"long name")?;
-
-    assert_eq!(path.read_sync()?, b"long name");
+    assert!(path.metadata_sync()?.modified()? > SystemTime::UNIX_EPOCH);
+    assert_eq!(path.read_sync()?, b"preserved");
     Ok(())
 }
 
 #[test]
-fn test_write_atomic_sync_rejects_path_without_file_name() -> Result<()> {
-    let error = path!("/")
-        .write_atomic_sync(b"data")
-        .err()
-        .ok_or_else(|| anyhow!("expected missing file name error"))?;
+fn touch_sync_preserves_concurrently_written_content() -> Result<()> {
+    let directory = tempdir()?;
+    for index in 0..32 {
+        let file = path!(&directory) / format!("touch-{index}.txt");
+        let barrier = Barrier::new(5);
 
-    assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
-    Ok(())
-}
+        thread::scope(|scope| -> Result<()> {
+            let handles: Vec<_> = (0..4)
+                .map(|_| {
+                    scope.spawn(|| {
+                        barrier.wait();
+                        file.touch_sync()
+                    })
+                })
+                .collect();
 
-// Test persist_to_sync
-#[test]
-fn test_persist_to_sync_replaces_destination() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let src = path!(&temp_dir) / "prepared.tmp";
-    let dest = path!(&temp_dir) / "dest.txt";
-    src.write_sync(b"new")?;
-    dest.write_sync(b"old")?;
+            barrier.wait();
+            let write_result = fs::write(&file, b"preserved content");
+            for handle in handles {
+                handle.join().map_err(|_| anyhow!("touch worker panicked"))??;
+            }
 
-    let persisted = src.persist_to_sync(&dest)?;
+            write_result?;
+            Ok(())
+        })?;
 
-    assert_eq!(persisted, dest);
-    assert!(!src.exists_sync()?);
-    assert_eq!(dest.read_sync()?, b"new");
-    Ok(())
-}
-
-// Test read_json_sync and write_json_sync
-#[test]
-fn test_read_write_json_sync() -> Result<()> {
-    #[derive(Debug, PartialEq, Serialize, Deserialize)]
-    struct TestData {
-        name: String,
-        value: i32,
+        assert_eq!(fs::read(&file)?, b"preserved content");
     }
 
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-
-    let original = TestData {
-        name: "test".to_owned(),
-        value: 42,
-    };
-
-    file_path.write_json_sync(&original)?;
-
-    let loaded: TestData = file_path.read_json_sync()?;
-    assert_eq!(loaded, original);
-    Ok(())
-}
-
-#[test]
-fn test_read_json_sync_missing_file_returns_io_error() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let missing = path!(&temp_dir) / "missing.json";
-
-    let error = missing
-        .read_json_sync::<serde_json::Value>()
-        .err()
-        .ok_or_else(|| anyhow!("expected missing file error"))?;
-
-    assert!(error.is_io());
-    assert_eq!(error.io_error_kind(), Some(io::ErrorKind::NotFound));
-    Ok(())
-}
-
-#[test]
-fn test_read_json_sync_invalid_json_returns_syntax_error() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-    file_path.write_sync(b"not json")?;
-
-    let error = file_path
-        .read_json_sync::<serde_json::Value>()
-        .err()
-        .ok_or_else(|| anyhow!("expected invalid JSON error"))?;
-
-    assert!(error.is_syntax());
-    assert_eq!(error.io_error_kind(), None);
-    Ok(())
-}
-
-#[test]
-fn test_write_json_sync_missing_parent_returns_io_error() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let file_path = path!(&temp_dir) / "missing" / "data.json";
-
-    let error = file_path
-        .write_json_sync([1, 2, 3])
-        .err()
-        .ok_or_else(|| anyhow!("expected missing parent error"))?;
-
-    assert!(error.is_io());
-    assert_eq!(error.io_error_kind(), Some(io::ErrorKind::NotFound));
-    Ok(())
-}
-
-// Test read_dir_sync
-#[test]
-fn test_read_dir_sync() -> Result<()> {
-    let temp_dir = tempdir()?;
-    fs::write(path!(&temp_dir) / "file1.txt", "content1")?;
-    fs::write(path!(&temp_dir) / "file2.txt", "content2")?;
-    fs::create_dir(path!(&temp_dir) / "subdir")?;
-
-    let dir_path = path!(&temp_dir);
-    let entries: Vec<_> = dir_path.read_dir_sync()?.collect();
-
-    // Should have 3 entries: 2 files + 1 directory
-    assert_eq!(entries.len(), 3);
-    Ok(())
-}
-
-// Test empty_dir_sync
-#[test]
-fn test_empty_dir_sync() -> Result<()> {
-    let temp_dir = tempdir()?;
-    fs::write(path!(&temp_dir) / "file1.txt", "content1")?;
-    fs::write(path!(&temp_dir) / "file2.txt", "content2")?;
-    fs::create_dir(path!(&temp_dir) / "subdir")?;
-
-    let dir_path = path!(&temp_dir);
-    dir_path.empty_dir_sync()?;
-
-    // Directory should be empty now
-    let entries: Vec<_> = dir_path.read_dir_sync()?.collect();
-    assert_eq!(entries.len(), 0);
     Ok(())
 }
 
 #[cfg(unix)]
 #[test]
-fn test_empty_dir_sync_removes_symlinks_without_removing_targets() -> Result<()> {
-    use std::os::unix::fs::symlink;
+fn touch_sync_creates_target_of_dangling_symlink() -> Result<()> {
+    let directory = tempdir()?;
+    let target = path!(&directory) / "target.txt";
+    let link = path!(&directory) / "link.txt";
+    link.symlink_to_sync(&target)?;
 
+    link.touch_sync()?;
+
+    assert!(link.is_symlink_sync()?);
+    assert!(target.is_file_sync()?);
+    Ok(())
+}
+
+#[test]
+fn empty_dir_sync_creates_missing_directory_with_parents() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path!(&temp_dir) / "missing" / "nested";
+
+    path.empty_dir_sync()?;
+
+    assert!(path.is_dir_sync()?);
+    assert_eq!(path.read_dir_names_lossy_sync()?.len(), 0);
+    Ok(())
+}
+
+#[test]
+fn empty_dir_sync_removes_contents_but_keeps_directory() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let directory = path!(&temp_dir) / "target";
+    fs::create_dir_all(&directory / "subdir" / "deep")?;
+    fs::write(&directory / "file.txt", "content")?;
+    fs::write(&directory / "subdir" / "deep" / "nested.txt", "nested")?;
+
+    directory.empty_dir_sync()?;
+
+    assert!(directory.is_dir_sync()?);
+    assert_eq!(directory.read_dir_names_lossy_sync()?.len(), 0);
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn empty_dir_sync_removes_symlinks_without_removing_targets() -> Result<()> {
     let directory = tempdir()?;
     let external = tempdir()?;
     let target_file = path!(&external) / "keep.txt";
@@ -488,9 +393,9 @@ fn test_empty_dir_sync_removes_symlinks_without_removing_targets() -> Result<()>
     fs::create_dir(&target_dir)?;
     fs::write(&nested_file, b"nested content")?;
 
-    symlink(&target_file, path!(&directory) / "file-link")?;
-    symlink(&target_dir, path!(&directory) / "dir-link")?;
-    symlink(path!(&external) / "missing", path!(&directory) / "dangling-link")?;
+    (path!(&directory) / "file-link").symlink_to_sync(&target_file)?;
+    (path!(&directory) / "dir-link").symlink_to_sync(&target_dir)?;
+    (path!(&directory) / "dangling-link").symlink_to_sync(path!(&external) / "missing")?;
 
     let path = path!(&directory);
     path.empty_dir_sync()?;
@@ -503,7 +408,7 @@ fn test_empty_dir_sync_removes_symlinks_without_removing_targets() -> Result<()>
 
 #[cfg(windows)]
 #[test]
-fn test_empty_dir_sync_removes_windows_directory_symlinks() -> Result<()> {
+fn empty_dir_sync_removes_windows_directory_symlinks() -> Result<()> {
     use std::{
         env,
         os::windows::fs::{
@@ -546,475 +451,504 @@ fn test_empty_dir_sync_removes_windows_directory_symlinks() -> Result<()> {
     Ok(())
 }
 
-// Test set_permissions_sync
-#[cfg(unix)]
 #[test]
-fn test_set_permissions_sync() -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
+fn create_parent_dir_all_sync_creates_missing_ancestors() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let file = path!(&temp_dir) / "nested" / "parent" / "file.txt";
 
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
+    file.create_parent_dir_all_sync()?;
+    file.create_parent_dir_all_sync()?;
 
-    // Read current permissions
-    let metadata = fs::metadata(&temp_file)?;
-    let original_mode = metadata.permissions().mode();
+    assert!(
+        file.parent()
+            .ok_or_else(|| anyhow!("expected a parent"))?
+            .is_dir_sync()?
+    );
 
-    // Set new permissions
-    file_path.set_permissions_sync(fs::Permissions::from_mode(0o644))?;
-
-    let new_metadata = fs::metadata(&temp_file)?;
-    assert_eq!(new_metadata.permissions().mode() & 0o777, 0o644);
-
-    // Restore original
-    file_path.set_permissions_sync(fs::Permissions::from_mode(original_mode))?;
+    assert!(!file.try_exists_sync()?);
     Ok(())
 }
 
-#[cfg(unix)]
-// Test chmod_sync
 #[test]
-fn test_chmod_sync() -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-
-    file_path.chmod_sync(0o744)?;
-    let metadata = fs::metadata(&temp_file)?;
-    assert_eq!(metadata.permissions().mode() & 0o777, 0o744);
-
-    file_path.chmod_sync(0o700)?;
-    let metadata = fs::metadata(&temp_file)?;
-    assert_eq!(metadata.permissions().mode() & 0o777, 0o700);
-
+fn create_parent_dir_all_sync_without_parent_is_a_no_op() -> Result<()> {
+    path!("").create_parent_dir_all_sync()?;
     Ok(())
 }
 
-// Test chown_sync - requires root, skip if not root
-#[cfg(unix)]
 #[test]
-fn test_chown_sync() -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
+fn write_atomic_sync_replaces_existing_file_and_leaves_no_temporary_file() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path!(&temp_dir) / "config.json";
+    path.write_sync(b"old")?;
 
-    // Skip if not root (chown requires root privileges)
-    // SAFETY: `geteuid` has no preconditions and does not dereference pointers.
-    if unsafe { libc::geteuid() } != 0 {
-        return Ok(());
+    path.write_atomic_sync(b"new")?;
+
+    assert_eq!(path.read_sync()?, b"new");
+    assert_eq!(path!(&temp_dir).read_dir_names_lossy_sync()?, ["config.json"]);
+    Ok(())
+}
+
+#[test]
+fn write_atomic_sync_creates_missing_file() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path!(&temp_dir) / "config.json";
+
+    path.write_atomic_sync(b"new")?;
+
+    assert_eq!(path.read_sync()?, b"new");
+    Ok(())
+}
+
+#[test]
+fn write_atomic_with_sync_prepares_empty_sibling_temporary_file() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path!(&temp_dir) / "secret.key";
+
+    path.write_atomic_with_sync(b"secret", |temp_path| {
+        assert_ne!(temp_path, &path);
+        assert_eq!(temp_path.parent(), path.parent());
+        assert_eq!(temp_path.metadata_sync()?.len(), 0);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            assert_eq!(temp_path.metadata_sync()?.permissions().mode() & 0o077, 0);
+            temp_path.chmod_sync(0o640)?;
+        }
+
+        Ok(())
+    })?;
+
+    assert_eq!(path.read_sync()?, b"secret");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        assert_eq!(path.metadata_sync()?.permissions().mode() & 0o777, 0o640);
     }
 
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn write_atomic_sync_keeps_existing_destination_mode() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp_dir = tempdir()?;
+    let path = path!(&temp_dir) / "config.json";
+    path.write_sync(b"old")?;
+    path.chmod_sync(0o644)?;
+
+    path.write_atomic_sync(b"new")?;
+    assert_eq!(path.metadata_sync()?.permissions().mode() & 0o777, 0o644);
+
+    path.write_atomic_with_sync(b"newer", |temp_path| temp_path.chmod_sync(0o600))?;
+    assert_eq!(path.metadata_sync()?.permissions().mode() & 0o777, 0o600);
+    Ok(())
+}
+
+#[test]
+fn write_atomic_with_sync_removes_temporary_file_and_keeps_old_content_on_failure() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path!(&temp_dir) / "config.json";
+    path.write_sync(b"old")?;
+
+    let error = path
+        .write_atomic_with_sync(b"new", |_| Err(io::Error::other("prepare failed")))
+        .err()
+        .ok_or_else(|| anyhow!("expected prepare error"))?;
+
+    assert_eq!(error.kind(), io::ErrorKind::Other);
+    assert_eq!(path.read_sync()?, b"old");
+    assert_eq!(path!(&temp_dir).read_dir_names_lossy_sync()?, ["config.json"]);
+    Ok(())
+}
+
+#[test]
+fn write_atomic_with_sync_removes_temporary_file_on_panic() -> Result<()> {
+    use std::panic::{
+        AssertUnwindSafe,
+        catch_unwind,
+    };
+
+    let temp_dir = tempdir()?;
+    let path = path!(&temp_dir) / "config.json";
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        path.write_atomic_with_sync(b"new", |_| panic!("prepare panicked"))
+    }));
+
+    assert!(result.is_err());
+    assert_eq!(path!(&temp_dir).read_dir_names_lossy_sync()?.len(), 0);
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn write_atomic_sync_accepts_maximum_length_file_name() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path!(&temp_dir) / "a".repeat(255);
+
+    path.write_atomic_sync(b"long name")?;
+
+    assert_eq!(path.read_sync()?, b"long name");
+    Ok(())
+}
+
+#[test]
+fn write_atomic_sync_rejects_path_without_file_name() -> Result<()> {
+    let error = path!("/")
+        .write_atomic_sync(b"data")
+        .err()
+        .ok_or_else(|| anyhow!("expected missing file name error"))?;
+
+    assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+    Ok(())
+}
+
+#[test]
+fn persist_to_sync_replaces_destination_and_consumes_source() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let src = path!(&temp_dir) / "prepared.tmp";
+    let dest = path!(&temp_dir) / "dest.txt";
+    src.write_sync(b"new")?;
+    dest.write_sync(b"old")?;
+
+    let persisted = src.persist_to_sync(&dest)?;
+
+    assert_eq!(persisted, dest);
+    assert!(!src.try_exists_sync()?);
+    assert_eq!(dest.read_sync()?, b"new");
+    Ok(())
+}
+
+#[test]
+fn persist_to_sync_fails_for_missing_source_without_touching_destination() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let dest = path!(&temp_dir) / "dest.txt";
+    dest.write_sync(b"old")?;
+
+    let error = (path!(&temp_dir) / "missing.tmp")
+        .persist_to_sync(&dest)
+        .err()
+        .ok_or_else(|| anyhow!("expected missing source error"))?;
+
+    assert_eq!(error.kind(), io::ErrorKind::NotFound);
+    assert_eq!(dest.read_sync()?, b"old");
+    Ok(())
+}
+
+#[test]
+fn json_round_trips_through_unsized_value() -> Result<()> {
+    #[derive(Debug, PartialEq, Serialize, Deserialize)]
+    struct TestData {
+        name: String,
+        value: i32,
+    }
+
+    let temp_dir = tempdir()?;
+    let file = path!(&temp_dir) / "data.json";
+    let original = [
+        TestData {
+            name: "first".to_owned(),
+            value: 1,
+        },
+        TestData {
+            name: "second".to_owned(),
+            value: 2,
+        },
+    ];
+
+    file.write_json_sync(&original[..])?;
+
+    let loaded: Vec<TestData> = file.read_json_sync()?;
+    assert_eq!(loaded, original);
+    Ok(())
+}
+
+#[test]
+fn read_json_sync_wraps_missing_file_as_io_error() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let missing = path!(&temp_dir) / "missing.json";
+
+    let error = missing
+        .read_json_sync::<serde_json::Value>()
+        .err()
+        .ok_or_else(|| anyhow!("expected missing file error"))?;
+
+    assert!(error.is_io());
+    assert_eq!(error.io_error_kind(), Some(io::ErrorKind::NotFound));
+    Ok(())
+}
+
+#[test]
+fn read_json_sync_reports_invalid_json_as_syntax_error() -> Result<()> {
     let temp_file = NamedTempFile::new()?;
     let file_path = path!(&temp_file);
+    file_path.write_sync(b"not json")?;
 
-    // Get current uid/gid
-    let metadata = fs::metadata(&temp_file)?;
-    let original_mode = metadata.permissions().mode();
+    let error = file_path
+        .read_json_sync::<serde_json::Value>()
+        .err()
+        .ok_or_else(|| anyhow!("expected invalid JSON error"))?;
 
-    // chown to same uid/gid (no-op but should work)
-    file_path.chown_sync(Some(0), Some(0))?;
-
-    // Restore permissions
-    file_path.set_permissions_sync(fs::Permissions::from_mode(original_mode))?;
+    assert!(error.is_syntax());
+    assert_eq!(error.io_error_kind(), None);
     Ok(())
 }
 
-// Test is_block_device_sync
-#[cfg(unix)]
 #[test]
-fn test_is_block_device_sync() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    assert!(!path!(&temp_file).is_block_device_sync()?);
+fn write_json_sync_wraps_missing_parent_as_io_error() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let file_path = path!(&temp_dir) / "missing" / "data.json";
+
+    let error = file_path
+        .write_json_sync(&[1, 2, 3])
+        .err()
+        .ok_or_else(|| anyhow!("expected missing parent error"))?;
+
+    assert!(error.is_io());
+    assert_eq!(error.io_error_kind(), Some(io::ErrorKind::NotFound));
+    assert!(!(path!(&temp_dir) / "missing").try_exists_sync()?);
     Ok(())
 }
 
-// Test is_char_device_sync
-#[cfg(unix)]
 #[test]
-fn test_is_char_device_sync() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    assert!(!path!(&temp_file).is_char_device_sync()?);
-    assert!(path!("/dev/null").is_char_device_sync()?);
+fn read_dir_helpers_collect_all_entries() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let directory = path!(&temp_dir);
+    fs::write(&directory / "a.txt", "")?;
+    fs::write(&directory / "b.txt", "")?;
+    fs::create_dir(&directory / "subdir")?;
+
+    let mut names = directory.read_dir_names_lossy_sync()?;
+    names.sort();
+    assert_eq!(names, ["a.txt", "b.txt", "subdir"]);
+
+    let mut paths = directory.read_dir_paths_sync()?;
+    paths.sort();
+    assert_eq!(
+        paths,
+        [&directory / "a.txt", &directory / "b.txt", &directory / "subdir"]
+    );
+
+    let mut lazy_paths = directory
+        .read_dir_sync()?
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<io::Result<Vec<_>>>()?;
+
+    lazy_paths.sort();
+    assert_eq!(lazy_paths, paths);
+
+    let mut entries = directory.read_dir_entries_sync()?;
+    entries.sort_by_key(PathEntry::file_name);
+    assert_eq!(
+        entries.iter().map(PathEntry::path).collect::<Vec<_>>(),
+        [&directory / "a.txt", &directory / "b.txt", &directory / "subdir"],
+    );
+
+    let is_dir: Vec<_> = entries
+        .iter()
+        .map(|entry| entry.file_type().map(|file_type| file_type.is_dir()))
+        .collect::<io::Result<_>>()?;
+
+    assert_eq!(is_dir, [false, false, true]);
     Ok(())
 }
 
-// Test is_fifo_sync
 #[cfg(unix)]
 #[test]
-fn test_is_fifo_sync() -> Result<()> {
+fn special_file_type_checks_identify_only_their_type() -> Result<()> {
     use std::{
         ffi::CString,
         io,
-        os::unix::ffi::OsStrExt,
+        os::unix::{
+            ffi::OsStrExt,
+            net::UnixListener,
+        },
     };
 
     let temp_dir = tempdir()?;
     let fifo = path!(&temp_dir) / "fifo";
-    let fifo_path = CString::new(fifo.as_os_str().as_bytes())?;
-    // SAFETY: `fifo_path` is a valid NUL-terminated string that outlives the call.
-    if unsafe { libc::mkfifo(fifo_path.as_ptr(), 0o600) } != 0 {
+    let fifo_c = CString::new(fifo.as_os_str().as_bytes())?;
+    // SAFETY: `fifo_c` is a valid NUL-terminated string that outlives the call.
+    if unsafe { libc::mkfifo(fifo_c.as_ptr(), 0o600) } != 0 {
         return Err(io::Error::last_os_error().into());
     }
 
-    assert!(fifo.is_fifo_sync()?);
-    assert!(!path!(&temp_dir).is_fifo_sync()?);
-    Ok(())
-}
-
-// Test is_socket_sync
-#[cfg(unix)]
-#[test]
-fn test_is_socket_sync() -> Result<()> {
-    use std::os::unix::net::UnixListener;
-
-    let temp_dir = tempdir()?;
     let socket = path!(&temp_dir) / "socket";
     let _listener = UnixListener::bind(&socket)?;
+    let char_device = path!("/dev/null");
+    let regular = path!(&temp_dir) / "file";
+    regular.write_sync(b"")?;
 
-    assert!(socket.is_socket_sync()?);
-    assert!(!path!(&temp_dir).is_socket_sync()?);
+    assert!(fifo.is_fifo_sync()? && !fifo.is_socket_sync()?);
+    assert!(socket.is_socket_sync()? && !socket.is_fifo_sync()?);
+    assert!(char_device.is_char_device_sync()? && !char_device.is_block_device_sync()?);
+    assert!(!regular.is_fifo_sync()? && !regular.is_socket_sync()? && !regular.is_char_device_sync()?);
+    assert!(!regular.is_block_device_sync()?);
+    assert_eq!(
+        (path!(&temp_dir) / "missing")
+            .is_fifo_sync()
+            .map_err(|error| error.kind()),
+        Err(io::ErrorKind::NotFound)
+    );
+
     Ok(())
 }
 
+#[cfg(unix)]
 #[test]
-fn test_copy_file_sync() -> Result<()> {
-    let temp_src = NamedTempFile::new()?;
-    let temp_dst = NamedTempFile::new()?;
-    let src = path!(&temp_src);
-    let dst = path!(&temp_dst);
+fn write_atomic_sync_replaces_symlink_and_creates_new_files_as_0600() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
 
-    src.write_sync(b"hello world")?;
-
-    let bytes = src.copy_file_sync(&dst)?;
-    assert_eq!(bytes, 11);
-
-    let content = dst.read_sync()?;
-    assert_eq!(content, b"hello world");
-    Ok(())
-}
-
-#[test]
-fn test_hard_link_sync() -> Result<()> {
     let temp_dir = tempdir()?;
-    let src = path!(&temp_dir) / "source.txt";
-    let link_path = path!(&temp_dir) / "hard-link.txt";
+    let target = path!(&temp_dir) / "target.txt";
+    let link = path!(&temp_dir) / "link.txt";
+    target.write_sync(b"old")?;
+    link.symlink_to_sync(&target)?;
 
-    src.write_sync(b"link test")?;
-    src.hard_link_sync(&link_path)?;
+    link.write_atomic_sync(b"new")?;
+    assert!(!link.is_symlink_sync()?);
+    assert_eq!(link.read_sync()?, b"new");
+    assert_eq!(target.read_sync()?, b"old");
 
-    assert_eq!(link_path.read_sync()?, b"link test");
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
+    let fresh = path!(&temp_dir) / "fresh.txt";
+    fresh.write_atomic_sync(b"x")?;
+    assert_eq!(fresh.metadata_sync()?.permissions().mode() & 0o777, 0o600);
+    Ok(())
+}
 
-        assert_eq!(src.metadata_sync()?.ino(), link_path.metadata_sync()?.ino());
+#[cfg(windows)]
+#[test]
+fn write_atomic_sync_replaces_destination_held_open_by_reader() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let path = path!(&temp_dir) / "config.json";
+    path.write_sync(b"old")?;
+    // std opens files with delete sharing, which the replace relies on.
+    let reader = fs::File::open(&path)?;
+
+    path.write_atomic_sync(b"new")?;
+    drop(reader);
+
+    assert_eq!(path.read_sync()?, b"new");
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn write_atomic_sync_replaces_a_self_referencing_symlink() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let dest = path!(&temp_dir) / "dest";
+    dest.symlink_to_sync("dest")?;
+
+    dest.write_atomic_sync(b"new")?;
+
+    assert!(!dest.is_symlink_sync()?);
+    assert_eq!(dest.read_sync()?, b"new");
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn persist_to_sync_rejects_a_symlink_source() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let data = path!(&temp_dir) / "data";
+    data.write_sync(b"new")?;
+    let source = path!(&temp_dir) / "staged";
+    source.symlink_to_sync("data")?;
+    let dest = path!(&temp_dir) / "dest";
+    dest.write_sync(b"old")?;
+
+    assert_eq!(
+        source.persist_to_sync(&dest).map_err(|error| error.kind()),
+        Err(io::ErrorKind::InvalidInput)
+    );
+
+    assert!(source.is_symlink_sync()?);
+    assert_eq!(dest.read_sync()?, b"old");
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn write_atomic_sync_fails_before_replacing_when_parent_is_unreadable() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let parent = path!(&temp_dir) / "dir";
+    parent.create_dir_sync()?;
+    let dest = &parent / "dest";
+    dest.write_sync(b"old")?;
+    parent.chmod_sync(0o300)?;
+    // Root can open the directory anyway, so only check the ordering when the open really fails.
+    let result = fs::File::open(&parent).is_err().then(|| dest.write_atomic_sync(b"new"));
+    parent.chmod_sync(0o700)?;
+
+    if let Some(result) = result {
+        assert_eq!(
+            result.map_err(|error| error.kind()),
+            Err(io::ErrorKind::PermissionDenied)
+        );
+
+        assert_eq!(dest.read_sync()?, b"old");
+        assert_eq!(parent.read_dir_names_lossy_sync()?, ["dest"]);
     }
 
     Ok(())
 }
 
-#[cfg(unix)]
 #[test]
-fn test_soft_link_sync() -> Result<()> {
+fn failed_replace_keeps_destination_and_cleans_up() -> Result<()> {
     let temp_dir = tempdir()?;
-    let src = path!(&temp_dir) / "source.txt";
-    let link_path = path!(&temp_dir) / "soft-link.txt";
+    let directory = path!(&temp_dir);
+    let dest = &directory / "dest";
+    dest.create_dir_sync()?;
+    let marker = &dest / "keep";
+    marker.write_sync(b"old")?;
+    let source = &directory / "source";
+    source.write_sync(b"new")?;
 
-    src.write_sync(b"symlink test")?;
-    src.soft_link_sync(&link_path)?;
+    assert!(dest.write_atomic_sync(b"new").is_err());
+    assert!(source.persist_to_sync(&dest).is_err());
 
-    // Read through symlink
-    let content = fs::read(link_path.as_path())?;
-    assert_eq!(content, b"symlink test");
-
-    // Verify link_path is a symlink
-    assert!(link_path.is_symlink_sync()?);
+    assert_eq!(source.read_sync()?, b"new");
+    assert_eq!(marker.read_sync()?, b"old");
+    let mut names = directory.read_dir_names_lossy_sync()?;
+    names.sort();
+    assert_eq!(names, ["dest", "source"]);
     Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(windows)]
 #[test]
-fn test_read_link_sync() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let target = path!(&temp_dir) / "missing.txt";
-    let link_path = path!(&temp_dir) / "link.txt";
-
-    target.soft_link_sync(&link_path)?;
-
-    assert_eq!(link_path.read_link_sync()?, target);
-    Ok(())
-}
-
-#[cfg(unix)]
-#[test]
-fn test_symlink_metadata_sync() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let src = path!(&temp_dir) / "source.txt";
-    let link_path = path!(&temp_dir) / "link.txt";
-
-    src.write_sync(b"meta test")?;
-    src.soft_link_sync(&link_path)?;
-
-    // symlink_metadata gets metadata of the link itself (not the target)
-    let meta = link_path.symlink_metadata_sync()?;
-    assert!(meta.file_type().is_symlink());
-    Ok(())
-}
-
-#[test]
-fn test_touch_sync_creates_new_file() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let new_file = path!(&temp_dir) / "touched.txt";
-    let path = new_file;
-
-    assert!(!path.exists_sync()?);
-    path.touch_sync()?;
-    assert!(path.exists_sync()?);
-    Ok(())
-}
-
-#[test]
-fn test_touch_sync_updates_existing() -> Result<()> {
+fn write_atomic_sync_gives_up_after_retrying_a_destination_without_delete_sharing() -> Result<()> {
     use std::{
-        fs::File,
-        time::SystemTime,
+        os::windows::fs::OpenOptionsExt,
+        time::{
+            Duration,
+            Instant,
+        },
     };
 
-    let temp_file = NamedTempFile::new()?;
-    let path = path!(&temp_file);
-    path.write_sync(b"preserved")?;
-    File::options()
-        .write(true)
-        .open(&path)?
-        .set_modified(SystemTime::UNIX_EPOCH)?;
+    // FILE_SHARE_READ | FILE_SHARE_WRITE, without FILE_SHARE_DELETE.
+    const SHARE_READ_WRITE: u32 = 0x1 | 0x2;
 
-    path.touch_sync()?;
-
-    assert!(path.metadata_sync()?.modified()? > SystemTime::UNIX_EPOCH);
-    assert_eq!(path.read_sync()?, b"preserved");
-    Ok(())
-}
-
-#[test]
-fn test_touch_sync_preserves_concurrently_written_content() -> Result<()> {
-    let directory = tempdir()?;
-    for index in 0..32 {
-        let file = path!(&directory) / format!("touch-{index}.txt");
-        let barrier = Barrier::new(5);
-
-        thread::scope(|scope| -> Result<()> {
-            let handles: Vec<_> = (0..4)
-                .map(|_| {
-                    scope.spawn(|| {
-                        barrier.wait();
-                        file.touch_sync()
-                    })
-                })
-                .collect();
-
-            barrier.wait();
-            let write_result = fs::write(&file, b"preserved content");
-            for handle in handles {
-                handle.join().map_err(|_| anyhow!("touch worker panicked"))??;
-            }
-
-            write_result?;
-            Ok(())
-        })?;
-
-        assert_eq!(fs::read(&file)?, b"preserved content");
-    }
-
-    Ok(())
-}
-
-#[cfg(unix)]
-#[test]
-fn test_touch_sync_creates_dangling_symlink_target() -> Result<()> {
-    use std::os::unix::fs::symlink;
-
-    let directory = tempdir()?;
-    let target = path!(&directory) / "target.txt";
-    let link = path!(&directory) / "link.txt";
-    symlink(&target, &link)?;
-
-    link.touch_sync()?;
-
-    assert!(fs::symlink_metadata(&link)?.file_type().is_symlink());
-    assert!(target.is_file_sync()?);
-    Ok(())
-}
-
-#[test]
-fn test_read_dir_names_sync() -> Result<()> {
     let temp_dir = tempdir()?;
-    fs::write(path!(&temp_dir) / "a.txt", "")?;
-    fs::write(path!(&temp_dir) / "b.txt", "")?;
-    fs::create_dir(path!(&temp_dir) / "subdir")?;
+    let dest = path!(&temp_dir) / "dest";
+    dest.write_sync(b"old")?;
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(SHARE_READ_WRITE)
+        .open(&dest)?;
 
-    let dir = path!(&temp_dir);
-    let names = dir.read_dir_names_sync()?;
-    assert_eq!(names.len(), 3);
-    assert!(names.contains(&String::from("a.txt")));
-    assert!(names.contains(&String::from("b.txt")));
-    assert!(names.contains(&String::from("subdir")));
-    Ok(())
-}
+    let started = std::time::Instant::now();
+    assert!(dest.write_atomic_sync(b"new").is_err());
+    assert!(started.elapsed() >= Duration::from_millis(900));
+    drop(lock);
 
-#[test]
-fn test_read_dir_paths_sync() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let file_a = path!(&temp_dir) / "file_a.txt";
-    let file_b = path!(&temp_dir) / "file_b.txt";
-    fs::write(&file_a, "")?;
-    fs::write(&file_b, "")?;
-
-    let dir = path!(&temp_dir);
-    let paths = dir.read_dir_paths_sync()?;
-    assert_eq!(paths.len(), 2);
-    // All returned paths should be absolute
-    for p in &paths {
-        assert!(p.is_absolute());
-    }
-
-    Ok(())
-}
-
-#[test]
-fn test_read_dir_entries_sync() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let file_a = path!(&temp_dir) / "entry_a.txt";
-    let file_b = path!(&temp_dir) / "entry_b.txt";
-    fs::write(&file_a, "")?;
-    fs::write(&file_b, "")?;
-
-    let dir = path!(&temp_dir);
-    let entries = dir.read_dir_entries_sync()?;
-    assert_eq!(entries.len(), 2);
-
-    let names: Vec<_> = entries
-        .iter()
-        .map(|entry| entry.file_name().to_string_lossy().to_string())
-        .collect();
-
-    assert!(names.contains(&String::from("entry_a.txt")));
-    assert!(names.contains(&String::from("entry_b.txt")));
-
-    Ok(())
-}
-
-#[test]
-fn test_create_parent_dir_sync() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let file = path!(&temp_dir) / "parent" / "file.txt";
-
-    assert!(file.create_parent_dir_sync()?);
-    let parent = file
-        .parent()
-        .ok_or_else(|| anyhow!("test file path should have a parent"))?;
-
-    assert!(parent.is_dir_sync()?);
-
-    Ok(())
-}
-
-#[test]
-fn test_create_parent_dir_all_sync() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let file = path!(&temp_dir) / "nested" / "parent" / "file.txt";
-
-    assert!(file.create_parent_dir_all_sync()?);
-    let parent = file
-        .parent()
-        .ok_or_else(|| anyhow!("test file path should have a parent"))?;
-
-    assert!(parent.is_dir_sync()?);
-
-    Ok(())
-}
-
-#[test]
-fn test_create_parent_dir_sync_without_parent_returns_false() -> Result<()> {
-    let path = path!("");
-
-    assert!(!path.create_parent_dir_sync()?);
-    assert!(!path.create_parent_dir_all_sync()?);
-
-    Ok(())
-}
-
-#[test]
-fn test_empty_dir_sync_creates_dir_if_missing() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let path = path!(&temp_dir) / "brand_new_dir";
-
-    // Directory doesn't exist
-    assert!(!path.exists_sync()?);
-
-    // empty_dir_sync should create it (via create_dir_all_sync)
-    path.empty_dir_sync()?;
-
-    assert!(path.is_dir_sync()?);
-    Ok(())
-}
-
-#[test]
-fn test_rename_to_sync_renames_file() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let src = path!(&temp_dir) / "source.txt";
-    let dest = path!(&temp_dir) / "dest.txt";
-
-    src.write_sync(b"move test")?;
-    let moved = src.rename_to_sync(&dest)?;
-
-    assert_eq!(moved, dest);
-    assert!(!src.exists_sync()?);
-    assert!(dest.is_file_sync()?);
-    assert_eq!(dest.read_sync()?, b"move test");
-    Ok(())
-}
-
-#[test]
-fn test_rename_to_sync_renames_dir() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let src = path!(&temp_dir) / "source-dir";
-    let nested = &src / "nested.txt";
-    let dest = path!(&temp_dir) / "dest-dir";
-
-    src.create_dir_sync()?;
-    nested.write_sync(b"nested")?;
-    let moved = src.rename_to_sync(&dest)?;
-
-    assert_eq!(moved, dest);
-    assert!(!src.exists_sync()?);
-    assert!(dest.is_dir_sync()?);
-    assert_eq!((&dest / "nested.txt").read_sync()?, b"nested");
-    Ok(())
-}
-
-#[test]
-fn test_open_sync_returns_readable_file() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let path = path!(&temp_file);
-    path.write_sync(b"open test")?;
-
-    let mut file = path.open_sync()?;
-    let mut content = String::new();
-    file.read_to_string(&mut content)?;
-
-    assert_eq!(content, "open test");
-    Ok(())
-}
-
-#[test]
-fn test_open_with_options_sync_uses_options() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let path = path!(&temp_dir) / "created.txt";
-    let mut options = fs::OpenOptions::new();
-    options.write(true).create_new(true);
-
-    let mut file = path.open_with_options_sync(&options)?;
-    file.write_all(b"created")?;
-    drop(file);
-
-    assert_eq!(path.read_sync()?, b"created");
+    assert_eq!(dest.read_sync()?, b"old");
+    assert_eq!(path!(&temp_dir).read_dir_names_lossy_sync()?, ["dest"]);
+    dest.write_atomic_sync(b"new")?;
+    assert_eq!(dest.read_sync()?, b"new");
     Ok(())
 }

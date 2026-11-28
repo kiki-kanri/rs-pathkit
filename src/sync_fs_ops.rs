@@ -1,151 +1,61 @@
-//! Blocking filesystem operations for owned paths.
-//!
-//! [`SyncFsOps`] defines the shared operation contract and is implemented for [`Path`].
-
 use std::{
+    ffi::OsString,
     fs::{
         self,
+        DirEntry,
         File,
         FileTimes,
+        FileType,
         Metadata,
         OpenOptions,
         Permissions,
-        ReadDir,
     },
     io,
-    io::Write,
     path::Path as StdPath,
-    process,
-    sync::atomic::{
-        AtomicU64,
-        Ordering,
-    },
-    time::{
-        SystemTime,
-        UNIX_EPOCH,
-    },
+    time::SystemTime,
 };
 
+use derive_more::From;
 use serde::{
     Serialize,
     de::DeserializeOwned,
 };
 
 use crate::{
-    core::Path,
-    entry::sync::PathEntry,
+    Path,
+    atomic_write,
 };
 
 /// Blocking filesystem operations for paths.
 ///
-/// [`Path`] implements this trait. For that implementation, methods borrow the stored
-/// path without changing it; filesystem changes occur during the call. Paths are
-/// interpreted by the operating system, including relative paths resolved against the
-/// current working directory. Multi-step operations are not transactional and can leave
-/// partial changes on failure. The behavior described below applies to that implementation.
+/// Methods without their own docs wrap the std function they are named after (`copy_file` wraps
+/// `fs::copy`, `open*` wrap `File::open` / `OpenOptions::open`) and return [`Path`] where std
+/// returns `PathBuf`. Rules shared by all methods:
 ///
-/// The [`Path`] implementation provides these shared behaviors:
-///
-/// - Metadata and type checks follow symlinks, except [`Self::is_symlink_sync`] and
-///   [`Self::symlink_metadata_sync`]. Type checks return an error for missing paths,
-///   rather than `false`. [`Self::exists_sync`] returns `false` for a missing target,
-///   including a dangling symlink, and propagates other inspection errors.
-/// - [`Self::get_file_size_sync`] returns metadata length in bytes, which is not
-///   necessarily allocated disk space or a meaningful content size for non-files.
-/// - [`Self::open_sync`] opens an existing file read-only. [`Self::open_with_options_sync`]
-///   uses the supplied options without changing them. Returned files follow
-///   [`std::fs::File`] ownership and close behavior.
-/// - [`Self::write_sync`] and [`Self::write_json_sync`] create or truncate a file without
-///   creating parent directories. JSON uses pretty serialization. [`Self::read_json_sync`]
-///   deserializes the complete file contents.
-/// - [`Self::write_atomic_sync`] writes to a temporary file in the destination's directory,
-///   syncs it, and replaces the destination, so readers see either the old or the new
-///   contents. [`Self::write_atomic_with_sync`] first runs `prepare` on the empty temporary
-///   file, for example to set permissions. The temporary file is created with mode `0600` on
-///   Unix or inherits the parent directory's ACL on Windows; the destination keeps its final
-///   permissions. On failure, the temporary file is removed when possible.
-/// - [`Self::persist_to_sync`] syncs this file and replaces the exact destination the same
-///   way, without falling back to copying across filesystems. On Windows, replacement can fail
-///   while the destination is open or when a path exceeds `MAX_PATH`.
-/// - [`Self::truncate_sync`] opens an existing file for writing and sets its length in
-///   bytes; `None` means `0`. Extending a file fills the added range with zero bytes.
-/// - [`Self::touch_sync`] updates only the modification time of an existing target to
-///   the current time, or creates a missing file. It does not truncate existing content
-///   or create parent directories.
-/// - [`Self::create_parent_dir_sync`] creates only the immediate parent and returns `true`
-///   on successful creation; an existing parent is an error. [`Self::create_parent_dir_all_sync`]
-///   creates missing ancestors and returns `true` on success even if the parent already
-///   exists. Both return `false` when the lexical path has no parent.
-/// - [`Self::empty_dir_sync`] creates a missing directory with its parents or removes
-///   the entries of an existing directory, keeping the directory itself. Removal is
-///   incremental and uses the standard library's file and recursive-directory removal rules.
-///   Child symlinks are removed without traversing their targets.
-/// - Directory collection methods return entries in filesystem iteration order, without
-///   sorting. [`Self::read_dir_names_sync`] converts names to strings with invalid Unicode
-///   replaced; [`Self::read_dir_paths_sync`] and [`Self::read_dir_entries_sync`] retain
-///   native path data. [`Self::read_dir_sync`] returns a lazy iterator whose entries can fail.
-/// - [`Self::copy_file_sync`] copies to the exact destination, overwriting an existing file
-///   and returning the number of bytes copied. [`Self::rename_to_sync`] renames to the exact
-///   destination and returns a new [`Path`]; it does not update the source value or fall back
-///   to copying across filesystems. Replacement rules depend on the platform.
-/// - Link methods use `self` as the source or target and `link` as the new link path.
-///   [`Self::hard_link_sync`] requires filesystem support. [`Self::read_link_sync`]
-///   returns the stored target without resolving it. The Unix-only `soft_link_sync`
-///   method stores the target as supplied.
-///
-/// Unix-only methods expose permission modes, owner and group IDs, and special-file
-/// checks. For ownership changes, `None` preserves the corresponding owner or group ID.
-/// Filesystem methods otherwise follow the corresponding [`std::fs`] operations.
-///
-/// # Errors
-///
-/// Propagates filesystem errors such as missing paths, permission errors, invalid file
-/// or directory types, and unsupported operations. Directory collection methods also
-/// propagate iteration errors instead of returning partial collections. UTF-8 string
-/// reads fail for invalid UTF-8; JSON methods return [`serde_json::Error`], with
-/// filesystem errors wrapped by [`serde_json::Error::io`]. Changes made before an error
-/// are not rolled back.
-///
-/// # Examples
+/// - Metadata and type checks follow symlinks, except `is_symlink_sync` and
+///   `symlink_metadata*`. Type checks return `Err` for a missing path, not `false`.
+/// - Multi-step operations are not transactional; a failure can leave partial changes.
+/// - `read_dir_{entries,names_lossy,paths}_sync` return entries in filesystem iteration order and
+///   fail as a whole on the first iteration error.
+/// - `*_if_exists` methods map only [`io::ErrorKind::NotFound`] to `None` / `false`; other errors,
+///   such as a non-directory parent component, are returned.
+/// - JSON methods wrap filesystem failures with [`serde_json::Error::io`]; use
+///   [`serde_json::Error::io_error_kind`] to inspect them.
 ///
 /// ```rust
 /// use pathkit::{
-///     SyncFsOps,
 ///     path,
+///     sync_fs_ops::SyncFsOps,
 /// };
 ///
 /// let directory = tempfile::tempdir()?;
 /// let file = path!(directory.path()) / "message.txt";
 /// file.write_sync(b"Hello!")?;
 /// assert_eq!(file.read_sync()?, b"Hello!");
-/// assert_eq!(file.get_file_size_sync()?, 6);
+/// assert_eq!(file.read_if_exists_sync()?, Some(b"Hello!".to_vec()));
 /// # Ok::<(), std::io::Error>(())
 /// ```
 pub trait SyncFsOps {
-    /// Returns a new absolute path with symlinks resolved by the filesystem.
-    ///
-    /// Uses [`std::fs::canonicalize`], leaving the original value unchanged. Unlike
-    /// [`Path::absolutize`], this operation requires the path to exist. On Windows, the
-    /// result uses the standard library's extended-length path representation.
-    ///
-    /// # Errors
-    ///
-    /// Propagates filesystem errors, including missing path components, permission errors,
-    /// and non-directory components before the end of the path.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use pathkit::{
-    ///     SyncFsOps,
-    ///     path,
-    /// };
-    ///
-    /// let directory = tempfile::tempdir()?;
-    /// let canonical = path!(directory.path()).canonicalize_sync()?;
-    /// assert!(canonical.is_absolute());
-    /// # Ok::<(), std::io::Error>(())
-    /// ```
     fn canonicalize_sync(&self) -> io::Result<Path>;
 
     #[cfg(unix)]
@@ -160,17 +70,18 @@ pub trait SyncFsOps {
 
     fn create_dir_sync(&self) -> io::Result<()>;
 
-    fn create_parent_dir_all_sync(&self) -> io::Result<bool>;
+    /// Creates the lexical parent and its missing ancestors; does nothing when there is no parent.
+    fn create_parent_dir_all_sync(&self) -> io::Result<()>;
 
-    fn create_parent_dir_sync(&self) -> io::Result<bool>;
-
+    /// Removes everything inside the directory but keeps the directory itself, creating it (with
+    /// parents) when missing. Child symlinks are removed without touching their targets; a symlink
+    /// at `self` is followed, so its target directory is emptied.
     fn empty_dir_sync(&self) -> io::Result<()>;
 
-    fn exists_sync(&self) -> io::Result<bool>;
+    fn try_exists_sync(&self) -> io::Result<bool>;
 
-    fn get_file_size_sync(&self) -> io::Result<u64>;
-
-    fn hard_link_sync(&self, link: impl AsRef<StdPath>) -> io::Result<()>;
+    /// Makes `self` a new hard link to `target`.
+    fn hard_link_to_sync(&self, target: impl AsRef<StdPath>) -> io::Result<()>;
 
     #[cfg(unix)]
     fn is_block_device_sync(&self) -> io::Result<bool>;
@@ -190,21 +101,30 @@ pub trait SyncFsOps {
 
     fn is_symlink_sync(&self) -> io::Result<bool>;
 
+    fn metadata_if_exists_sync(&self) -> io::Result<Option<Metadata>>;
+
     fn metadata_sync(&self) -> io::Result<Metadata>;
 
     fn open_sync(&self) -> io::Result<File>;
 
     fn open_with_options_sync(&self, options: &OpenOptions) -> io::Result<File>;
 
+    /// Syncs this regular file, renames it over `dest`, and on Unix syncs `dest`'s directory. Fails
+    /// with [`io::ErrorKind::InvalidInput`] for a symlink or other non-regular source, and instead
+    /// of copying when `dest` is on another filesystem. The file keeps its own permissions. On
+    /// Windows the source must be writable, and transient replace failures are retried as in
+    /// [`Self::write_atomic_with_sync`].
     fn persist_to_sync(&self, dest: impl AsRef<StdPath>) -> io::Result<Path>;
 
     fn read_dir_entries_sync(&self) -> io::Result<Vec<PathEntry>>;
 
-    fn read_dir_names_sync(&self) -> io::Result<Vec<String>>;
+    fn read_dir_names_lossy_sync(&self) -> io::Result<Vec<String>>;
 
     fn read_dir_paths_sync(&self) -> io::Result<Vec<Path>>;
 
     fn read_dir_sync(&self) -> io::Result<ReadDir>;
+
+    fn read_if_exists_sync(&self) -> io::Result<Option<Vec<u8>>>;
 
     fn read_json_sync<T: DeserializeOwned>(&self) -> serde_json::Result<T>;
 
@@ -212,38 +132,64 @@ pub trait SyncFsOps {
 
     fn read_sync(&self) -> io::Result<Vec<u8>>;
 
+    fn read_to_string_if_exists_sync(&self) -> io::Result<Option<String>>;
+
     fn read_to_string_sync(&self) -> io::Result<String>;
 
     fn remove_dir_all_sync(&self) -> io::Result<()>;
 
     fn remove_dir_sync(&self) -> io::Result<()>;
 
+    /// Returns whether a file was removed.
+    fn remove_file_if_exists_sync(&self) -> io::Result<bool>;
+
     fn remove_file_sync(&self) -> io::Result<()>;
 
+    /// Not durable across a crash; use [`Self::persist_to_sync`] when it must be.
     fn rename_to_sync(&self, dest: impl AsRef<StdPath>) -> io::Result<Path>;
 
     fn set_permissions_sync(&self, permissions: Permissions) -> io::Result<()>;
 
-    // TODO: Add Windows `symlink_file` and `symlink_dir` variants; Windows requires the link type
-    // to be chosen explicitly instead of inferred from the target.
+    /// Makes `self` a symlink to `target`, stored exactly as given, so a relative target resolves
+    /// against the link's directory.
     #[cfg(unix)]
-    fn soft_link_sync(&self, link: impl AsRef<StdPath>) -> io::Result<()>;
+    fn symlink_to_sync(&self, target: impl AsRef<StdPath>) -> io::Result<()>;
+
+    fn symlink_metadata_if_exists_sync(&self) -> io::Result<Option<Metadata>>;
 
     fn symlink_metadata_sync(&self) -> io::Result<Metadata>;
 
+    /// Sets the modification time to now, creating an empty file when missing. Never truncates. A
+    /// symlink is followed; a dangling one gets its target created.
     fn touch_sync(&self) -> io::Result<()>;
 
-    fn truncate_sync(&self, len: Option<u64>) -> io::Result<()>;
-
+    /// Writes to a temporary sibling file, syncs it, and renames it over `self`, so readers see
+    /// either the old or the new contents. See [`Self::write_atomic_with_sync`].
     fn write_atomic_sync(&self, contents: impl AsRef<[u8]>) -> io::Result<()>;
 
+    /// Like [`Self::write_atomic_sync`], but runs `prepare` on the still-empty temporary file first
+    /// to change its metadata in place (for example permissions or ACLs); it must not replace or
+    /// write the file.
+    ///
+    /// On Unix the result keeps the permission bits of an existing regular file at `self` (otherwise
+    /// `0600`), but not its owner; on Windows it inherits the directory ACL. `prepare` runs afterwards and can override
+    /// either. A symlink at `self` is replaced by a regular file rather than followed. On failure,
+    /// removing the temporary file is attempted but not guaranteed. On Windows, a replace that fails
+    /// because another process briefly holds a file open is retried for about one second.
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`io::ErrorKind::InvalidInput`] when the path has no file name (such as `/` or a
+    /// path ending in `..`). Needs write permission on the parent directory, so it can fail where
+    /// [`Self::write_sync`] to an existing writable file succeeds.
     fn write_atomic_with_sync(
         &self,
         contents: impl AsRef<[u8]>,
         prepare: impl FnOnce(&Path) -> io::Result<()>,
     ) -> io::Result<()>;
 
-    fn write_json_sync<T: Serialize>(&self, data: T) -> serde_json::Result<()>;
+    /// Writes pretty-printed JSON.
+    fn write_json_sync<T: Serialize + ?Sized>(&self, data: &T) -> serde_json::Result<()>;
 
     fn write_sync(&self, contents: impl AsRef<[u8]>) -> io::Result<()>;
 }
@@ -262,9 +208,7 @@ impl SyncFsOps for Path {
 
     #[cfg(unix)]
     fn chown_sync(&self, uid: Option<u32>, gid: Option<u32>) -> io::Result<()> {
-        use std::os::unix::fs::chown;
-
-        chown(self, uid, gid)
+        std::os::unix::fs::chown(self, uid, gid)
     }
 
     fn copy_file_sync(&self, dest: impl AsRef<StdPath>) -> io::Result<u64> {
@@ -279,29 +223,15 @@ impl SyncFsOps for Path {
         fs::create_dir(self)
     }
 
-    fn create_parent_dir_all_sync(&self) -> io::Result<bool> {
-        if let Some(parent) = self.parent() {
-            parent.create_dir_all_sync()?;
-            return Ok(true);
-        }
-
-        Ok(false)
-    }
-
-    fn create_parent_dir_sync(&self) -> io::Result<bool> {
-        if let Some(parent) = self.parent() {
-            parent.create_dir_sync()?;
-            return Ok(true);
-        }
-
-        Ok(false)
+    fn create_parent_dir_all_sync(&self) -> io::Result<()> {
+        self.parent().map_or(Ok(()), |parent| parent.create_dir_all_sync())
     }
 
     fn empty_dir_sync(&self) -> io::Result<()> {
         #[cfg(windows)]
         use std::os::windows::fs::FileTypeExt;
 
-        if !self.exists_sync()? {
+        if !self.try_exists_sync()? {
             return self.create_dir_all_sync();
         }
 
@@ -312,6 +242,7 @@ impl SyncFsOps for Path {
             if file_type.is_dir() {
                 fs::remove_dir_all(entry_path)?;
             } else {
+                // A Windows directory symlink must be removed as a directory.
                 #[cfg(windows)]
                 if file_type.is_symlink_dir() {
                     fs::remove_dir(entry_path)?;
@@ -325,16 +256,12 @@ impl SyncFsOps for Path {
         Ok(())
     }
 
-    fn exists_sync(&self) -> io::Result<bool> {
-        self.try_exists()
+    fn try_exists_sync(&self) -> io::Result<bool> {
+        fs::exists(self)
     }
 
-    fn get_file_size_sync(&self) -> io::Result<u64> {
-        Ok(self.metadata_sync()?.len())
-    }
-
-    fn hard_link_sync(&self, link: impl AsRef<StdPath>) -> io::Result<()> {
-        fs::hard_link(self, link)
+    fn hard_link_to_sync(&self, target: impl AsRef<StdPath>) -> io::Result<()> {
+        fs::hard_link(target, self)
     }
 
     #[cfg(unix)]
@@ -377,6 +304,10 @@ impl SyncFsOps for Path {
         Ok(self.symlink_metadata_sync()?.file_type().is_symlink())
     }
 
+    fn metadata_if_exists_sync(&self) -> io::Result<Option<Metadata>> {
+        none_if_not_found(self.metadata_sync())
+    }
+
     fn metadata_sync(&self) -> io::Result<Metadata> {
         fs::metadata(self)
     }
@@ -390,40 +321,32 @@ impl SyncFsOps for Path {
     }
 
     fn persist_to_sync(&self, dest: impl AsRef<StdPath>) -> io::Result<Path> {
-        sync_file(self)?;
-        replace_durably(self, dest.as_ref())?;
+        atomic_write::persist(self, dest.as_ref())?;
         Ok(Self::new(dest))
     }
 
     fn read_dir_entries_sync(&self) -> io::Result<Vec<PathEntry>> {
-        let mut entries = Vec::new();
-        for entry in fs::read_dir(self)? {
-            entries.push(PathEntry::new(entry?));
-        }
-
-        Ok(entries)
+        fs::read_dir(self)?.map(|entry| entry.map(PathEntry)).collect()
     }
 
-    fn read_dir_names_sync(&self) -> io::Result<Vec<String>> {
-        let mut names = Vec::new();
-        for entry in fs::read_dir(self)? {
-            names.push(entry?.file_name().to_string_lossy().into());
-        }
-
-        Ok(names)
+    fn read_dir_names_lossy_sync(&self) -> io::Result<Vec<String>> {
+        fs::read_dir(self)?
+            .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
+            .collect()
     }
 
     fn read_dir_paths_sync(&self) -> io::Result<Vec<Path>> {
-        let mut paths = Vec::new();
-        for entry in fs::read_dir(self)? {
-            paths.push(Self::from(entry?.path()));
-        }
-
-        Ok(paths)
+        fs::read_dir(self)?
+            .map(|entry| entry.map(|entry| Self::from(entry.path())))
+            .collect()
     }
 
     fn read_dir_sync(&self) -> io::Result<ReadDir> {
-        fs::read_dir(self)
+        fs::read_dir(self).map(ReadDir)
+    }
+
+    fn read_if_exists_sync(&self) -> io::Result<Option<Vec<u8>>> {
+        none_if_not_found(self.read_sync())
     }
 
     fn read_json_sync<T: DeserializeOwned>(&self) -> serde_json::Result<T> {
@@ -438,6 +361,10 @@ impl SyncFsOps for Path {
         fs::read(self)
     }
 
+    fn read_to_string_if_exists_sync(&self) -> io::Result<Option<String>> {
+        none_if_not_found(self.read_to_string_sync())
+    }
+
     fn read_to_string_sync(&self) -> io::Result<String> {
         fs::read_to_string(self)
     }
@@ -448,6 +375,10 @@ impl SyncFsOps for Path {
 
     fn remove_dir_sync(&self) -> io::Result<()> {
         fs::remove_dir(self)
+    }
+
+    fn remove_file_if_exists_sync(&self) -> io::Result<bool> {
+        Ok(none_if_not_found(self.remove_file_sync())?.is_some())
     }
 
     fn remove_file_sync(&self) -> io::Result<()> {
@@ -464,10 +395,12 @@ impl SyncFsOps for Path {
     }
 
     #[cfg(unix)]
-    fn soft_link_sync(&self, link: impl AsRef<StdPath>) -> io::Result<()> {
-        use std::os::unix::fs::symlink;
+    fn symlink_to_sync(&self, target: impl AsRef<StdPath>) -> io::Result<()> {
+        std::os::unix::fs::symlink(target, self)
+    }
 
-        symlink(self, link)
+    fn symlink_metadata_if_exists_sync(&self) -> io::Result<Option<Metadata>> {
+        none_if_not_found(self.symlink_metadata_sync())
     }
 
     fn symlink_metadata_sync(&self) -> io::Result<Metadata> {
@@ -475,19 +408,16 @@ impl SyncFsOps for Path {
     }
 
     fn touch_sync(&self) -> io::Result<()> {
-        if !self.exists_sync()? {
+        // Opening only when missing keeps `touch` working on directories and read-only files.
+        if !self.try_exists_sync()? {
             OpenOptions::new().write(true).create(true).truncate(false).open(self)?;
         }
 
         fs::set_times(self, FileTimes::new().set_modified(SystemTime::now()))
     }
 
-    fn truncate_sync(&self, len: Option<u64>) -> io::Result<()> {
-        OpenOptions::new().write(true).open(self)?.set_len(len.unwrap_or(0))
-    }
-
     fn write_atomic_sync(&self, contents: impl AsRef<[u8]>) -> io::Result<()> {
-        self.write_atomic_with_sync(contents, |_| Ok(()))
+        atomic_write::write_atomic(self, contents.as_ref(), |_| Ok(()))
     }
 
     fn write_atomic_with_sync(
@@ -495,15 +425,11 @@ impl SyncFsOps for Path {
         contents: impl AsRef<[u8]>,
         prepare: impl FnOnce(&Path) -> io::Result<()>,
     ) -> io::Result<()> {
-        let (temp_path, file) = create_temp_sibling(self)?;
-        let mut cleanup = RemoveOnDrop(Some(&temp_path));
-        write_and_replace(file, &temp_path, self, contents.as_ref(), prepare)?;
-        cleanup.0 = None;
-        Ok(())
+        atomic_write::write_atomic(self, contents.as_ref(), prepare)
     }
 
-    fn write_json_sync<T: Serialize>(&self, data: T) -> serde_json::Result<()> {
-        self.write_sync(serde_json::to_vec_pretty(&data)?)
+    fn write_json_sync<T: Serialize + ?Sized>(&self, data: &T) -> serde_json::Result<()> {
+        self.write_sync(serde_json::to_vec_pretty(data)?)
             .map_err(serde_json::Error::io)
     }
 
@@ -512,142 +438,57 @@ impl SyncFsOps for Path {
     }
 }
 
-// Constants/Statics
-const TEMP_FILE_ATTEMPTS: u32 = 64;
-static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
+/// Metadata and file-type queries do not follow symlinks. On Unix, a retained entry can keep its
+/// directory's file descriptor open after the iterator is dropped.
+#[derive(Debug, From)]
+pub struct PathEntry(DirEntry);
 
-// Structs
+impl PathEntry {
+    #[inline]
+    pub fn path(&self) -> Path {
+        Path::from(self.0.path())
+    }
 
-/// Removes the temporary file on errors and unwinding unless disarmed.
-struct RemoveOnDrop<'a>(Option<&'a Path>);
+    #[inline]
+    pub fn file_name(&self) -> OsString {
+        self.0.file_name()
+    }
 
-impl Drop for RemoveOnDrop<'_> {
-    fn drop(&mut self) {
-        if let Some(path) = self.0 {
-            let _ = fs::remove_file(path);
-        }
+    pub fn metadata(&self) -> io::Result<Metadata> {
+        self.0.metadata()
+    }
+
+    pub fn file_type(&self) -> io::Result<FileType> {
+        self.0.file_type()
+    }
+
+    #[inline]
+    pub fn as_dir_entry(&self) -> &DirEntry {
+        &self.0
+    }
+
+    #[inline]
+    pub fn into_dir_entry(self) -> DirEntry {
+        self.0
     }
 }
 
-// Functions
-fn create_temp_sibling(path: &Path) -> io::Result<(Path, File)> {
-    #[cfg(unix)]
-    use std::os::unix::fs::OpenOptionsExt;
+#[derive(Debug)]
+pub struct ReadDir(fs::ReadDir);
 
-    if path.file_name().is_none() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "atomic write path has no file name",
-        ));
+impl Iterator for ReadDir {
+    type Item = io::Result<PathEntry>;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(|entry| entry.map(PathEntry))
     }
+}
 
-    let parent = parent_or_current_dir(path);
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| duration.subsec_nanos());
-
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    options.mode(0o600);
-
-    for _ in 0..TEMP_FILE_ATTEMPTS {
-        let counter = TEMP_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
-        // Keep the name short and independent of the destination to stay within name length limits.
-        let temp_path = Path::from(parent.join(format!(".pathkit-{:x}-{nanos:x}-{counter:x}.tmp", process::id())));
-        match options.open(&temp_path) {
-            Ok(file) => return Ok((temp_path, file)),
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {},
-            Err(error) => return Err(error),
-        }
+pub(crate) fn none_if_not_found<T>(result: io::Result<T>) -> io::Result<Option<T>> {
+    match result {
+        Ok(value) => Ok(Some(value)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
     }
-
-    Err(io::Error::new(
-        io::ErrorKind::AlreadyExists,
-        "failed to create a unique temporary file for atomic write",
-    ))
-}
-
-fn parent_or_current_dir(path: &StdPath) -> &StdPath {
-    path.parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| StdPath::new("."))
-}
-
-#[cfg(not(windows))]
-fn replace_durably(source: &StdPath, dest: &StdPath) -> io::Result<()> {
-    fs::rename(source, dest)?;
-
-    #[cfg(unix)]
-    File::open(parent_or_current_dir(dest))?.sync_all()?;
-    Ok(())
-}
-
-#[cfg(windows)]
-fn replace_durably(source: &StdPath, dest: &StdPath) -> io::Result<()> {
-    use std::os::windows::ffi::OsStrExt;
-
-    use windows_sys::Win32::Storage::FileSystem::{
-        MOVEFILE_REPLACE_EXISTING,
-        MOVEFILE_WRITE_THROUGH,
-        MoveFileExW,
-    };
-
-    fn wide_path(path: &StdPath) -> io::Result<Vec<u16>> {
-        let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
-        if wide.contains(&0) {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "path contains a NUL character",
-            ));
-        }
-
-        wide.push(0);
-        Ok(wide)
-    }
-
-    let source = wide_path(source)?;
-    let dest = wide_path(dest)?;
-
-    // SAFETY: both paths are NUL-terminated UTF-16 strings without interior NULs that outlive the call.
-    let replaced = unsafe {
-        MoveFileExW(
-            source.as_ptr(),
-            dest.as_ptr(),
-            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
-        )
-    };
-
-    if replaced == 0 {
-        return Err(io::Error::last_os_error());
-    }
-
-    Ok(())
-}
-
-// TODO: On macOS, `sync_all` uses `F_FULLFSYNC`, which some filesystems (SMB, VirtioFS, some FUSE)
-// reject; fall back to `fsync` for those errors here and in `write_and_replace` and `replace_durably`.
-fn sync_file(path: &StdPath) -> io::Result<()> {
-    // Windows requires write access to flush file buffers.
-    #[cfg(windows)]
-    let file = OpenOptions::new().write(true).open(path)?;
-    #[cfg(not(windows))]
-    let file = File::open(path)?;
-
-    file.sync_all()
-}
-
-fn write_and_replace(
-    mut file: File,
-    temp_path: &Path,
-    dest: &Path,
-    contents: &[u8],
-    prepare: impl FnOnce(&Path) -> io::Result<()>,
-) -> io::Result<()> {
-    prepare(temp_path)?;
-    file.write_all(contents)?;
-    file.sync_all()?;
-    // Windows cannot replace the destination while this handle is open.
-    drop(file);
-    replace_durably(temp_path, dest)
 }

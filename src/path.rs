@@ -255,6 +255,7 @@ mod tests {
             (base.clone() / "").as_os_str(),
             OsStr::new(&format!("base{MAIN_SEPARATOR}"))
         );
+
         assert_eq!(base, path!("base"));
     }
 

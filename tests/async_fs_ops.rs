@@ -1,382 +1,308 @@
 #![cfg(feature = "async-fs-ops")]
 
-use std::io;
+use std::{
+    ffi::OsString,
+    io,
+};
 
 use anyhow::{
     Result,
     anyhow,
 };
 use pathkit::{
-    AsyncFsOps,
-    AsyncPathEntry,
-    Path,
-    SyncFsOps,
+    async_fs_ops::AsyncFsOps,
     path,
+    sync_fs_ops::SyncFsOps,
 };
-use serde::{
-    Deserialize,
-    Serialize,
-};
-use tempfile::{
-    NamedTempFile,
-    tempdir,
-};
-use tokio::{
-    fs as async_fs,
-    io::{
-        AsyncReadExt,
-        AsyncWriteExt,
-    },
-};
+use tempfile::tempdir;
 
-// Test canonicalize
-#[tokio::test]
-async fn test_canonicalize() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let original = path!(&temp_dir) / ".";
-
-    let canonical: Path = original.canonicalize().await?;
-    assert!(canonical.is_absolute());
-    assert_eq!(canonical.as_path(), async_fs::canonicalize(&original).await?);
-    assert_eq!(canonical, original.canonicalize_sync()?);
-    Ok(())
+fn expect_error<T, E>(result: Result<T, E>) -> Result<E> {
+    result.err().ok_or_else(|| anyhow!("expected an error"))
 }
 
-// Test exists
 #[tokio::test]
-async fn test_exists() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
+async fn async_wrappers_round_trip_a_file() -> Result<()> {
+    let directory = tempdir()?;
+    let source = path!(&directory) / "source.txt";
+    let copy = path!(&directory) / "copy.txt";
+    let renamed = path!(&directory) / "renamed.txt";
 
-    assert!(file_path.exists().await?);
+    source.write(b"hello").await?;
+    assert_eq!(source.read().await?, b"hello");
+    assert_eq!(source.read_to_string().await?, "hello");
+    assert!(source.is_file().await?);
+    assert_eq!(source.copy_file(&copy).await?, 5);
+    assert_eq!(copy.rename_to(&renamed).await?, renamed);
+    assert!(!copy.try_exists().await?);
+
+    renamed.remove_file().await?;
+    assert!(!renamed.try_exists().await?);
     Ok(())
 }
 
 #[tokio::test]
-async fn test_exists_false() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let path = path!(&temp_dir) / "non_existent_file.txt";
+async fn read_dir_entries_returns_usable_async_entries() -> Result<()> {
+    let directory = tempdir()?;
+    let file = path!(&directory) / "file.txt";
+    file.write(b"content").await?;
+    (path!(&directory) / "subdir").create_dir().await?;
 
-    assert!(!path.exists().await?);
-    Ok(())
-}
+    let mut entries = path!(&directory).read_dir_entries().await?;
+    entries.sort_by_key(pathkit::async_fs_ops::AsyncPathEntry::file_name);
+    assert_eq!(entries.len(), 2);
 
-// Test is_file
-#[tokio::test]
-async fn test_is_file() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
+    let file_entry = &entries[0];
+    assert_eq!(file_entry.file_name(), OsString::from("file.txt"));
+    assert_eq!(file_entry.path(), file);
+    assert!(file_entry.file_type().await?.is_file());
+    assert_eq!(file_entry.metadata().await?.len(), 7);
 
-    assert!(file_path.is_file().await?);
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_is_file_false() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let dir_path = path!(&temp_dir);
-
-    assert!(!dir_path.is_file().await?);
-    Ok(())
-}
-
-// Test is_dir
-#[tokio::test]
-async fn test_is_dir() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let dir_path = path!(&temp_dir);
-
-    assert!(dir_path.is_dir().await?);
+    let directory_entry = &entries[1];
+    assert_eq!(directory_entry.file_name(), OsString::from("subdir"));
+    assert!(directory_entry.file_type().await?.is_dir());
     Ok(())
 }
 
 #[tokio::test]
-async fn test_is_dir_false() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
+async fn read_dir_names_and_paths_list_children() -> Result<()> {
+    let directory = tempdir()?;
+    (path!(&directory) / "a.txt").write(b"").await?;
+    (path!(&directory) / "b").create_dir().await?;
 
-    assert!(!file_path.is_dir().await?);
-    Ok(())
-}
+    let mut names = path!(&directory).read_dir_names_lossy().await?;
+    names.sort();
+    assert_eq!(names, ["a.txt", "b"]);
 
-// Test is_symlink
-#[cfg(unix)]
-#[tokio::test]
-async fn test_is_symlink() -> Result<()> {
-    use std::os::unix::fs::symlink;
+    let mut paths = path!(&directory).read_dir_paths().await?;
+    paths.sort();
+    assert_eq!(paths, [path!(&directory) / "a.txt", path!(&directory) / "b"]);
 
-    let temp_dir = tempdir()?;
-    let target = path!(&temp_dir) / "target.txt";
-    async_fs::write(&target, "test").await?;
+    let mut read_dir = path!(&directory).read_dir().await?;
+    let mut lazy_paths = Vec::new();
+    while let Some(entry) = read_dir.next_entry().await? {
+        lazy_paths.push(entry.path());
+    }
 
-    let link = path!(&temp_dir) / "link.txt";
-    symlink(&target, &link)?;
-
-    assert!(link.is_symlink().await?);
-    Ok(())
-}
-
-// Test metadata
-#[tokio::test]
-async fn test_metadata() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-
-    let metadata = file_path.metadata().await?;
-    assert!(metadata.is_file());
+    lazy_paths.sort();
+    assert_eq!(lazy_paths, paths);
+    assert!(read_dir.next_entry().await?.is_none());
     Ok(())
 }
 
 #[tokio::test]
-async fn test_symlink_metadata_for_regular_file() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
+async fn empty_dir_removes_contents_and_creates_missing_directory() -> Result<()> {
+    let directory = tempdir()?;
+    let nested = path!(&directory) / "subdir" / "nested";
+    nested.create_dir_all().await?;
+    (&nested / "file.txt").write(b"content").await?;
+    (path!(&directory) / "file.txt").write(b"content").await?;
 
-    assert!(file_path.symlink_metadata().await?.is_file());
+    path!(&directory).empty_dir().await?;
+    assert_eq!(path!(&directory).read_dir_names_lossy().await?, [] as [String; 0]);
+
+    let created = path!(&directory) / "missing" / "dir";
+    created.empty_dir().await?;
+    assert!(created.is_dir().await?);
     Ok(())
 }
 
 #[tokio::test]
-async fn test_symlink_metadata_for_missing_path() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let missing = path!(&temp_dir) / "missing";
+async fn touch_creates_missing_file() -> Result<()> {
+    let directory = tempdir()?;
+    let file = path!(&directory) / "touched.txt";
 
-    let error = missing
-        .symlink_metadata()
-        .await
-        .err()
-        .ok_or_else(|| anyhow!("expected missing path error"))?;
+    file.touch().await?;
 
-    assert_eq!(error.kind(), io::ErrorKind::NotFound);
-    Ok(())
-}
-
-#[cfg(unix)]
-#[tokio::test]
-async fn test_symlink_metadata_does_not_follow_links() -> Result<()> {
-    use std::os::unix::fs::symlink;
-
-    let temp_dir = tempdir()?;
-    let target = path!(&temp_dir) / "target.txt";
-    let link = path!(&temp_dir) / "link.txt";
-    async_fs::write(&target, "test").await?;
-    symlink(&target, &link)?;
-
-    assert!(link.symlink_metadata().await?.file_type().is_symlink());
-    assert!(link.metadata().await?.is_file());
-
-    async_fs::remove_file(&target).await?;
-    assert!(link.symlink_metadata().await?.file_type().is_symlink());
-    assert!(link.metadata().await.is_err());
-    Ok(())
-}
-
-// Test read and write
-#[tokio::test]
-async fn test_read_write() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-
-    let test_content = b"Hello, World!";
-    file_path.write(test_content).await?;
-
-    let read_content = file_path.read().await?;
-    assert_eq!(read_content, test_content);
-    Ok(())
-}
-
-// Test read_to_string
-#[tokio::test]
-async fn test_read_to_string() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-
-    let test_content = "Hello, World!";
-    file_path.write(test_content).await?;
-
-    let read_content = file_path.read_to_string().await?;
-    assert_eq!(read_content, test_content);
-    Ok(())
-}
-
-// Test create_dir
-#[tokio::test]
-async fn test_create_dir() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let dir_path = path!(&temp_dir) / "new_dir";
-
-    dir_path.create_dir().await?;
-
-    assert!(dir_path.is_dir().await?);
-    Ok(())
-}
-
-// Test create_dir_all
-#[tokio::test]
-async fn test_create_dir_all() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let dir_path = path!(&temp_dir) / "parent" / "child" / "grandchild";
-
-    dir_path.create_dir_all().await?;
-
-    assert!(dir_path.is_dir().await?);
-    Ok(())
-}
-
-// Test remove_dir
-#[tokio::test]
-async fn test_remove_dir() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let dir_path = path!(&temp_dir) / "to_remove";
-    async_fs::create_dir(&dir_path).await?;
-
-    assert!(dir_path.exists().await?);
-    dir_path.remove_dir().await?;
-    assert!(!dir_path.exists().await?);
-    Ok(())
-}
-
-// Test remove_file
-#[tokio::test]
-async fn test_remove_file() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-
-    assert!(file_path.exists().await?);
-    file_path.remove_file().await?;
-    assert!(!file_path.exists().await?);
-    Ok(())
-}
-
-// Test remove_dir_all
-#[tokio::test]
-async fn test_remove_dir_all() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let parent = path!(&temp_dir) / "parent";
-    async_fs::create_dir(&parent).await?;
-    async_fs::write(&parent / "file1.txt", "content1").await?;
-    async_fs::write(&parent / "file2.txt", "content2").await?;
-
-    assert!(parent.exists().await?);
-    parent.remove_dir_all().await?;
-    assert!(!parent.exists().await?);
-    Ok(())
-}
-
-// Test get_file_size
-#[tokio::test]
-async fn test_get_file_size() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-
-    let test_content = b"Hello, World!";
-    file_path.write(test_content).await?;
-
-    let size = file_path.get_file_size().await?;
-    assert_eq!(size, test_content.len() as u64);
-    Ok(())
-}
-
-// Test truncate
-#[tokio::test]
-async fn test_truncate() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-
-    let test_content = b"Hello, World!";
-    file_path.write(test_content).await?;
-
-    // Truncate to 5 bytes
-    file_path.truncate(Some(5)).await?;
-
-    let size = file_path.get_file_size().await?;
-    assert_eq!(size, 5);
-    Ok(())
-}
-
-// Test write_atomic
-#[tokio::test]
-async fn test_write_atomic_replaces_existing_file() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let path = path!(&temp_dir) / "config.json";
-    path.write(b"old").await?;
-
-    path.write_atomic(b"new").await?;
-
-    assert_eq!(path.read().await?, b"new");
-    assert_eq!(path!(&temp_dir).read_dir_names().await?, ["config.json"]);
+    assert!(file.is_file().await?);
+    assert_eq!(file.read().await?, b"");
     Ok(())
 }
 
 #[tokio::test]
-async fn test_write_atomic_with_prepares_empty_temporary_file() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let path = path!(&temp_dir) / "secret.key";
-    let parent = path.parent();
-
-    path.write_atomic_with(b"secret", move |temp_path| {
-        assert_eq!(temp_path.parent(), parent);
-        assert_eq!(temp_path.get_file_size_sync()?, 0);
-        Ok(())
-    })
-    .await?;
-
-    assert_eq!(path.read().await?, b"secret");
-    assert_eq!(path!(&temp_dir).read_dir_names().await?, ["secret.key"]);
-    Ok(())
-}
-
-// Test persist_to
-#[tokio::test]
-async fn test_persist_to_replaces_destination() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let src = path!(&temp_dir) / "prepared.tmp";
-    let dest = path!(&temp_dir) / "dest.txt";
-    src.write(b"new").await?;
+async fn persist_to_replaces_destination() -> Result<()> {
+    let directory = tempdir()?;
+    let source = path!(&directory) / "prepared.tmp";
+    let dest = path!(&directory) / "dest.txt";
+    source.write(b"new").await?;
     dest.write(b"old").await?;
 
-    let persisted = src.persist_to(&dest).await?;
+    assert_eq!(source.persist_to(&dest).await?, dest);
 
-    assert_eq!(persisted, dest);
-    assert!(!src.exists().await?);
+    assert!(!source.try_exists().await?);
     assert_eq!(dest.read().await?, b"new");
     Ok(())
 }
 
-// Test read_json and write_json
 #[tokio::test]
-async fn test_read_write_json() -> Result<()> {
-    #[derive(Debug, PartialEq, Serialize, Deserialize)]
-    struct TestData {
-        name: String,
-        value: i32,
-    }
+async fn persist_to_missing_source_returns_not_found() -> Result<()> {
+    let directory = tempdir()?;
+    let source = path!(&directory) / "missing.tmp";
+    let dest = path!(&directory) / "dest.txt";
 
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
+    let error = expect_error(source.persist_to(&dest).await)?;
 
-    let original = TestData {
-        name: "test".to_owned(),
-        value: 42,
-    };
-
-    file_path.write_json(&original).await?;
-
-    let loaded: TestData = file_path.read_json().await?;
-    assert_eq!(loaded, original);
+    assert_eq!(error.kind(), io::ErrorKind::NotFound);
+    assert!(!dest.try_exists().await?);
     Ok(())
 }
 
 #[tokio::test]
-async fn test_read_json_missing_file_returns_io_error() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let missing = path!(&temp_dir) / "missing.json";
+async fn write_atomic_replaces_file_without_leaving_temporary_files() -> Result<()> {
+    let directory = tempdir()?;
+    let file = path!(&directory) / "config.json";
+    file.write(b"old").await?;
 
-    let error = missing
-        .read_json::<serde_json::Value>()
-        .await
-        .err()
-        .ok_or_else(|| anyhow!("expected missing file error"))?;
+    file.write_atomic(b"new").await?;
+
+    assert_eq!(file.read().await?, b"new");
+    assert_eq!(path!(&directory).read_dir_names_lossy().await?, ["config.json"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn write_atomic_with_runs_prepare_on_empty_sibling_temporary_file() -> Result<()> {
+    let directory = tempdir()?;
+    let file = path!(&directory) / "secret.key";
+    let parent = file.parent();
+
+    file.write_atomic_with(b"secret", move |temp_path| {
+        assert_ne!(temp_path.file_name(), Some("secret.key".as_ref()));
+        assert_eq!(temp_path.parent(), parent);
+        assert_eq!(temp_path.metadata_sync()?.len(), 0);
+        Ok(())
+    })
+    .await?;
+
+    assert_eq!(file.read().await?, b"secret");
+    assert_eq!(path!(&directory).read_dir_names_lossy().await?, ["secret.key"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn write_atomic_with_prepare_error_is_returned_and_temporary_file_removed() -> Result<()> {
+    let directory = tempdir()?;
+    let file = path!(&directory) / "config.json";
+    file.write(b"old").await?;
+
+    let error = expect_error(
+        file.write_atomic_with(b"new", |_| {
+            Err(io::Error::new(io::ErrorKind::PermissionDenied, "rejected"))
+        })
+        .await,
+    )?;
+
+    assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+    assert_eq!(file.read().await?, b"old");
+    assert_eq!(path!(&directory).read_dir_names_lossy().await?, ["config.json"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn write_atomic_with_prepare_panic_surfaces_as_io_error_and_temporary_file_removed() -> Result<()> {
+    let directory = tempdir()?;
+    let file = path!(&directory) / "config.json";
+    file.write(b"old").await?;
+
+    let error = expect_error(file.write_atomic_with(b"new", |_| panic!("prepare panicked")).await)?;
+
+    assert_eq!(error.kind(), io::ErrorKind::Other);
+    assert_eq!(file.read().await?, b"old");
+    assert_eq!(path!(&directory).read_dir_names_lossy().await?, ["config.json"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn if_exists_methods_return_none_or_false_for_missing_path() -> Result<()> {
+    let directory = tempdir()?;
+    let missing = path!(&directory) / "missing";
+
+    assert!(missing.read_if_exists().await?.is_none());
+    assert!(missing.read_to_string_if_exists().await?.is_none());
+    assert!(missing.metadata_if_exists().await?.is_none());
+    assert!(missing.symlink_metadata_if_exists().await?.is_none());
+    assert!(!missing.remove_file_if_exists().await?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn if_exists_methods_return_values_for_existing_path() -> Result<()> {
+    let directory = tempdir()?;
+    let file = path!(&directory) / "file.txt";
+    file.write(b"content").await?;
+
+    assert_eq!(file.read_if_exists().await?.as_deref(), Some(b"content".as_slice()));
+    assert_eq!(file.read_to_string_if_exists().await?.as_deref(), Some("content"));
+    assert_eq!(file.metadata_if_exists().await?.map(|metadata| metadata.len()), Some(7));
+    assert_eq!(
+        file.symlink_metadata_if_exists().await?.map(|metadata| metadata.len()),
+        Some(7)
+    );
+
+    assert!(file.remove_file_if_exists().await?);
+    assert!(!file.try_exists().await?);
+    assert!(!file.remove_file_if_exists().await?);
+    Ok(())
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn symlink_metadata_if_exists_returns_some_for_dangling_symlink() -> Result<()> {
+    let directory = tempdir()?;
+    let link = path!(&directory) / "link";
+    link.symlink_to(path!(&directory) / "missing").await?;
+
+    assert!(link.metadata_if_exists().await?.is_none());
+    assert!(
+        link.symlink_metadata_if_exists()
+            .await?
+            .is_some_and(|metadata| metadata.file_type().is_symlink())
+    );
+
+    assert!(link.remove_file_if_exists().await?);
+    Ok(())
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn if_exists_methods_propagate_errors_other_than_not_found() -> Result<()> {
+    let directory = tempdir()?;
+    let blocker = path!(&directory) / "blocker";
+    blocker.write(b"file").await?;
+    let child = &blocker / "child";
+
+    let errors = [
+        expect_error(child.read_if_exists().await)?,
+        expect_error(child.read_to_string_if_exists().await)?,
+        expect_error(child.metadata_if_exists().await)?,
+        expect_error(child.symlink_metadata_if_exists().await)?,
+        expect_error(child.remove_file_if_exists().await)?,
+    ];
+
+    for error in errors {
+        assert_eq!(error.kind(), io::ErrorKind::NotADirectory);
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn json_round_trips_unsized_values() -> Result<()> {
+    let directory = tempdir()?;
+    let file = path!(&directory) / "data.json";
+    let values = vec![1, 2, 3];
+
+    file.write_json(values.as_slice()).await?;
+
+    assert_eq!(file.read_json::<Vec<i32>>().await?, values);
+    Ok(())
+}
+
+#[tokio::test]
+async fn read_json_missing_file_returns_wrapped_io_error() -> Result<()> {
+    let directory = tempdir()?;
+    let missing = path!(&directory) / "missing.json";
+
+    let error = expect_error(missing.read_json::<serde_json::Value>().await)?;
 
     assert!(error.is_io());
     assert_eq!(error.io_error_kind(), Some(io::ErrorKind::NotFound));
@@ -384,16 +310,12 @@ async fn test_read_json_missing_file_returns_io_error() -> Result<()> {
 }
 
 #[tokio::test]
-async fn test_read_json_invalid_json_returns_syntax_error() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-    file_path.write(b"not json").await?;
+async fn read_json_invalid_content_returns_syntax_error() -> Result<()> {
+    let directory = tempdir()?;
+    let file = path!(&directory) / "invalid.json";
+    file.write(b"not json").await?;
 
-    let error = file_path
-        .read_json::<serde_json::Value>()
-        .await
-        .err()
-        .ok_or_else(|| anyhow!("expected invalid JSON error"))?;
+    let error = expect_error(file.read_json::<serde_json::Value>().await)?;
 
     assert!(error.is_syntax());
     assert_eq!(error.io_error_kind(), None);
@@ -401,550 +323,99 @@ async fn test_read_json_invalid_json_returns_syntax_error() -> Result<()> {
 }
 
 #[tokio::test]
-async fn test_write_json_missing_parent_returns_io_error() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let file_path = path!(&temp_dir) / "missing" / "data.json";
+async fn write_json_missing_parent_returns_wrapped_io_error() -> Result<()> {
+    let directory = tempdir()?;
+    let file = path!(&directory) / "missing" / "data.json";
 
-    let error = file_path
-        .write_json([1, 2, 3])
-        .await
-        .err()
-        .ok_or_else(|| anyhow!("expected missing parent error"))?;
+    let error = expect_error(file.write_json(&[1, 2, 3]).await)?;
 
     assert!(error.is_io());
     assert_eq!(error.io_error_kind(), Some(io::ErrorKind::NotFound));
     Ok(())
 }
 
-// Test read_dir
 #[tokio::test]
-async fn test_read_dir() -> Result<()> {
-    let temp_dir = tempdir()?;
-    async_fs::write(path!(&temp_dir) / "file1.txt", "content1").await?;
-    async_fs::write(path!(&temp_dir) / "file2.txt", "content2").await?;
-    async_fs::create_dir(path!(&temp_dir) / "subdir").await?;
-
-    let dir_path = path!(&temp_dir);
-    let mut entries = dir_path.read_dir().await?;
-    let mut count = 0;
-    while entries.next_entry().await?.is_some() {
-        count += 1;
-    }
-
-    // Should have 3 entries: 2 files + 1 directory
-    assert_eq!(count, 3);
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_read_dir_entries() -> Result<()> {
-    let temp_dir = tempdir()?;
-    async_fs::write(path!(&temp_dir) / "file1.txt", "content1").await?;
-    async_fs::write(path!(&temp_dir) / "file2.txt", "content2").await?;
-
-    let dir_path = path!(&temp_dir);
-    let entries = dir_path.read_dir_entries().await?;
-    assert_eq!(entries.len(), 2);
-
-    let paths: Vec<_> = entries.iter().map(AsyncPathEntry::path).collect();
-    let path_strings: Vec<_> = paths
-        .iter()
-        .filter_map(|p| p.file_name().map(|name| name.to_string_lossy().to_string()))
-        .collect();
-
-    assert!(path_strings.contains(&"file1.txt".to_owned()));
-    assert!(path_strings.contains(&"file2.txt".to_owned()));
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_read_dir_names() -> Result<()> {
-    let temp_dir = tempdir()?;
-    async_fs::write(path!(&temp_dir) / "a.txt", "").await?;
-    async_fs::write(path!(&temp_dir) / "b.txt", "").await?;
-    async_fs::create_dir(path!(&temp_dir) / "subdir").await?;
-
-    let dir = path!(&temp_dir);
-    let names = dir.read_dir_names().await?;
-    assert_eq!(names.len(), 3);
-    assert!(names.contains(&String::from("a.txt")));
-    assert!(names.contains(&String::from("b.txt")));
-    assert!(names.contains(&String::from("subdir")));
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_read_dir_paths() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let file_a = path!(&temp_dir) / "file_a.txt";
-    let file_b = path!(&temp_dir) / "file_b.txt";
-    async_fs::write(&file_a, "").await?;
-    async_fs::write(&file_b, "").await?;
-
-    let dir = path!(&temp_dir);
-    let paths = dir.read_dir_paths().await?;
-    assert_eq!(paths.len(), 2);
-    for path in &paths {
-        assert!(path.is_absolute());
-    }
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_create_parent_dir() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let file = path!(&temp_dir) / "parent" / "file.txt";
-
-    assert!(file.create_parent_dir().await?);
-    let parent = file
-        .parent()
-        .ok_or_else(|| anyhow!("test file path should have a parent"))?;
-
-    assert!(parent.is_dir().await?);
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_create_parent_dir_all() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let file = path!(&temp_dir) / "nested" / "parent" / "file.txt";
-
-    assert!(file.create_parent_dir_all().await?);
-    let parent = file
-        .parent()
-        .ok_or_else(|| anyhow!("test file path should have a parent"))?;
-
-    assert!(parent.is_dir().await?);
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_create_parent_dir_without_parent_returns_false() -> Result<()> {
-    let path = path!("");
-
-    assert!(!path.create_parent_dir().await?);
-    assert!(!path.create_parent_dir_all().await?);
-
-    Ok(())
-}
-
-// Test empty_dir
-#[tokio::test]
-async fn test_empty_dir() -> Result<()> {
-    let temp_dir = tempdir()?;
-    async_fs::write(path!(&temp_dir) / "file1.txt", "content1").await?;
-    async_fs::write(path!(&temp_dir) / "file2.txt", "content2").await?;
-    async_fs::create_dir(path!(&temp_dir) / "subdir").await?;
-
-    let dir_path = path!(&temp_dir);
-    dir_path.empty_dir().await?;
-
-    // Directory should be empty now
-    let mut entries = dir_path.read_dir().await?;
-    let mut count = 0;
-    while entries.next_entry().await?.is_some() {
-        count += 1;
-    }
-
-    assert_eq!(count, 0);
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_empty_dir_creates_missing_directory() -> Result<()> {
+async fn create_parent_dir_all_creates_missing_ancestors() -> Result<()> {
     let directory = tempdir()?;
-    let path = path!(&directory) / "parent" / "empty";
+    let file = path!(&directory) / "nested" / "parent" / "file.txt";
 
-    path.empty_dir().await?;
+    file.create_parent_dir_all().await?;
+    file.create_parent_dir_all().await?;
 
-    assert!(path.is_dir().await?);
-    assert_eq!(path.read_dir_paths().await?.len(), 0);
+    assert!((path!(&directory) / "nested" / "parent").is_dir().await?);
+    assert!(!file.try_exists().await?);
     Ok(())
 }
 
-#[cfg(unix)]
 #[tokio::test]
-async fn test_empty_dir_removes_symlinks_without_removing_targets() -> Result<()> {
-    use std::os::unix::fs::symlink;
+async fn create_parent_dir_all_without_parent_is_noop() -> Result<()> {
+    path!("").create_parent_dir_all().await?;
+    Ok(())
+}
 
+#[tokio::test]
+async fn link_methods_use_the_receiver_as_the_new_link() -> Result<()> {
     let directory = tempdir()?;
-    let external = tempdir()?;
-    let target_file = path!(&external) / "keep.txt";
-    let target_dir = path!(&external) / "keep-dir";
-    let nested_file = &target_dir / "keep.txt";
-    async_fs::write(&target_file, b"preserved").await?;
-    async_fs::create_dir(&target_dir).await?;
-    async_fs::write(&nested_file, b"nested content").await?;
+    let target = path!(&directory) / "target";
+    let hard = path!(&directory) / "hard";
+    target.write(b"first").await?;
 
-    symlink(&target_file, path!(&directory) / "file-link")?;
-    symlink(&target_dir, path!(&directory) / "dir-link")?;
-    symlink(path!(&external) / "missing", path!(&directory) / "dangling-link")?;
-
-    let path = path!(&directory);
-    path.empty_dir().await?;
-
-    assert_eq!(path.read_dir_paths().await?.len(), 0);
-    assert_eq!(async_fs::read(&target_file).await?, b"preserved");
-    assert_eq!(async_fs::read(&nested_file).await?, b"nested content");
-    Ok(())
-}
-
-#[cfg(windows)]
-#[tokio::test]
-async fn test_empty_dir_removes_windows_directory_symlinks() -> Result<()> {
-    use std::{
-        env,
-        os::windows::fs::{
-            symlink_dir,
-            symlink_file,
-        },
-    };
-
-    const ERROR_PRIVILEGE_NOT_HELD: i32 = 1314;
-
-    let directory = tempdir()?;
-    let external = tempdir()?;
-    let target_file = path!(&external) / "keep.txt";
-    let target_dir = path!(&external) / "keep-dir";
-    let nested_file = &target_dir / "keep.txt";
-    async_fs::write(&target_file, b"preserved").await?;
-    async_fs::create_dir(&target_dir).await?;
-    async_fs::write(&nested_file, b"nested content").await?;
-
-    // Symlink creation needs a privilege on Windows: skip locally without it, but require it in CI.
-    match symlink_dir(
-        path!(&external) / "missing-dir",
-        path!(&directory) / "dangling-dir-link",
-    ) {
-        Err(error) if error.raw_os_error() == Some(ERROR_PRIVILEGE_NOT_HELD) && env::var_os("CI").is_none() => {
-            return Ok(());
-        },
-        result => result?,
-    }
-
-    symlink_dir(&target_dir, path!(&directory) / "dir-link")?;
-    symlink_file(&target_file, path!(&directory) / "file-link")?;
-
-    let path = path!(&directory);
-    path.empty_dir().await?;
-
-    assert_eq!(path.read_dir_paths().await?.len(), 0);
-    assert_eq!(async_fs::read(&target_file).await?, b"preserved");
-    assert_eq!(async_fs::read(&nested_file).await?, b"nested content");
-    Ok(())
-}
-
-// Test set_permissions
-#[cfg(unix)]
-#[tokio::test]
-async fn test_set_permissions() -> Result<()> {
-    use std::{
-        fs::{
-            Permissions,
-            metadata,
-        },
-        os::unix::fs::PermissionsExt,
-    };
-
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-
-    // Read current permissions
-    let file_metadata = metadata(&temp_file)?;
-    let original_mode = file_metadata.permissions().mode();
-
-    // Set new permissions
-    file_path.set_permissions(Permissions::from_mode(0o644)).await?;
-
-    let new_metadata = metadata(&temp_file)?;
-    assert_eq!(new_metadata.permissions().mode() & 0o777, 0o644);
-
-    // Restore original
-    file_path.set_permissions(Permissions::from_mode(original_mode)).await?;
-    Ok(())
-}
-
-// Test chmod
-#[cfg(unix)]
-#[tokio::test]
-async fn test_chmod() -> Result<()> {
-    use std::{
-        fs::metadata,
-        os::unix::fs::PermissionsExt,
-    };
-
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-
-    file_path.chmod(0o744).await?;
-    let file_metadata = metadata(&temp_file)?;
-    assert_eq!(file_metadata.permissions().mode() & 0o777, 0o744);
-
-    file_path.chmod(0o700).await?;
-    let file_metadata = metadata(&temp_file)?;
-    assert_eq!(file_metadata.permissions().mode() & 0o777, 0o700);
-
-    Ok(())
-}
-
-// Test chown - requires root, skip if not root
-#[cfg(unix)]
-#[tokio::test]
-async fn test_chown() -> Result<()> {
-    use std::{
-        fs::{
-            Permissions,
-            metadata,
-        },
-        os::unix::fs::PermissionsExt,
-    };
-
-    // Skip if not root (chown requires root privileges)
-    // SAFETY: `geteuid` has no preconditions and does not dereference pointers.
-    if unsafe { libc::geteuid() } != 0 {
-        return Ok(());
-    }
-
-    let temp_file = NamedTempFile::new()?;
-    let file_path = path!(&temp_file);
-
-    // Get current uid/gid
-    let file_metadata = metadata(&temp_file)?;
-    let original_mode = file_metadata.permissions().mode();
-
-    // chown to same uid/gid (no-op but should work)
-    file_path.chown(Some(0), Some(0)).await?;
-
-    // Restore permissions
-    file_path.set_permissions(Permissions::from_mode(original_mode)).await?;
-    Ok(())
-}
-
-// Test is_block_device
-#[cfg(unix)]
-#[tokio::test]
-async fn test_is_block_device() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    assert!(!path!(&temp_file).is_block_device().await?);
-    Ok(())
-}
-
-// Test is_char_device
-#[cfg(unix)]
-#[tokio::test]
-async fn test_is_char_device() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    assert!(!path!(&temp_file).is_char_device().await?);
-    assert!(path!("/dev/null").is_char_device().await?);
-    Ok(())
-}
-
-// Test is_fifo
-#[cfg(unix)]
-#[tokio::test]
-async fn test_is_fifo() -> Result<()> {
-    use std::{
-        ffi::CString,
-        io,
-        os::unix::ffi::OsStrExt,
-    };
-
-    let temp_dir = tempdir()?;
-    let fifo = path!(&temp_dir) / "fifo";
-    let fifo_path = CString::new(fifo.as_os_str().as_bytes())?;
-    // SAFETY: `fifo_path` is a valid NUL-terminated string that outlives the call.
-    if unsafe { libc::mkfifo(fifo_path.as_ptr(), 0o600) } != 0 {
-        return Err(io::Error::last_os_error().into());
-    }
-
-    assert!(fifo.is_fifo().await?);
-    assert!(!path!(&temp_dir).is_fifo().await?);
-    Ok(())
-}
-
-// Test is_socket
-#[cfg(unix)]
-#[tokio::test]
-async fn test_is_socket() -> Result<()> {
-    use std::os::unix::net::UnixListener;
-
-    let temp_dir = tempdir()?;
-    let socket = path!(&temp_dir) / "socket";
-    let _listener = UnixListener::bind(&socket)?;
-
-    assert!(socket.is_socket().await?);
-    assert!(!path!(&temp_dir).is_socket().await?);
-    Ok(())
-}
-
-// Test copy_file
-#[tokio::test]
-async fn test_copy_file() -> Result<()> {
-    let temp_src = NamedTempFile::new()?;
-    let temp_dst = NamedTempFile::new()?;
-    let src = path!(&temp_src);
-    let dst = path!(&temp_dst);
-
-    src.write(b"hello world").await?;
-
-    let bytes = src.copy_file(&dst).await?;
-    assert_eq!(bytes, 11);
-
-    let content = dst.read().await?;
-    assert_eq!(content, b"hello world");
-    Ok(())
-}
-
-// Test hard_link
-#[tokio::test]
-async fn test_hard_link() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let src = path!(&temp_dir) / "source.txt";
-    let link = path!(&temp_dir) / "hard-link.txt";
-
-    src.write(b"link test").await?;
-    src.hard_link(&link).await?;
-
-    assert_eq!(link.read().await?, b"link test");
+    hard.hard_link_to(&target).await?;
+    hard.write(b"second").await?;
+    assert_eq!(target.read().await?, b"second");
 
     #[cfg(unix)]
     {
-        use std::os::unix::fs::MetadataExt;
-
-        assert_eq!(src.metadata().await?.ino(), link.metadata().await?.ino());
+        let soft = path!(&directory) / "soft";
+        soft.symlink_to("target").await?;
+        assert_eq!(soft.read_link().await?, path!("target"));
+        assert_eq!(soft.read().await?, b"second");
     }
 
     Ok(())
 }
 
-// Test soft_link
-#[cfg(unix)]
-#[tokio::test]
-async fn test_soft_link() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let src = path!(&temp_dir) / "source.txt";
-    let link = path!(&temp_dir) / "soft-link.txt";
-
-    src.write(b"symlink test").await?;
-    src.soft_link(&link).await?;
-
-    assert_eq!(link.read().await?, b"symlink test");
-    assert!(link.is_symlink().await?);
-    Ok(())
-}
-
-// Test read_link
-#[cfg(unix)]
-#[tokio::test]
-async fn test_read_link() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let target = path!(&temp_dir) / "missing.txt";
-    let link = path!(&temp_dir) / "link.txt";
-
-    target.soft_link(&link).await?;
-
-    assert_eq!(link.read_link().await?, target);
-    Ok(())
-}
-
-// Test touch
-#[tokio::test]
-async fn test_touch_creates_new_file() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let path = path!(&temp_dir) / "touched.txt";
-
-    path.touch().await?;
-
-    assert!(path.is_file().await?);
-    assert_eq!(path.read().await?, b"");
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_touch_updates_existing_without_truncating() -> Result<()> {
+#[test]
+fn dropping_an_in_flight_atomic_write_still_publishes_it() -> Result<()> {
     use std::{
-        fs::File,
-        time::SystemTime,
+        future::Future,
+        sync::mpsc,
+        task::{
+            Context,
+            Waker,
+        },
+        time::Duration,
     };
 
-    let temp_file = NamedTempFile::new()?;
-    let path = path!(&temp_file);
-    path.write(b"preserved").await?;
-    File::options()
-        .write(true)
-        .open(&path)?
-        .set_modified(SystemTime::UNIX_EPOCH)?;
+    let directory = tempdir()?;
+    let dest = path!(&directory) / "dest";
+    dest.write_sync(b"old")?;
+    let runtime = tokio::runtime::Builder::new_current_thread().build()?;
 
-    path.touch().await?;
+    runtime.block_on(async {
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+        let mut operation = Box::pin(dest.write_atomic_with(b"new", move |_| {
+            started_tx.send(()).map_err(io::Error::other)?;
+            resume_rx.recv_timeout(Duration::from_secs(5)).map_err(io::Error::other)
+        }));
 
-    assert!(path.metadata().await?.modified()? > SystemTime::UNIX_EPOCH);
-    assert_eq!(path.read().await?, b"preserved");
-    Ok(())
-}
+        assert!(
+            operation
+                .as_mut()
+                .poll(&mut Context::from_waker(Waker::noop()))
+                .is_pending()
+        );
 
-#[tokio::test]
-async fn test_rename_to_renames_file() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let src = path!(&temp_dir) / "source.txt";
-    let dest = path!(&temp_dir) / "dest.txt";
+        started_rx.recv_timeout(Duration::from_secs(5))?;
+        drop(operation);
+        resume_tx.send(())?;
+        Ok::<(), anyhow::Error>(())
+    })?;
 
-    src.write(b"move test").await?;
-    let moved = src.rename_to(&dest).await?;
-
-    assert_eq!(moved, dest);
-    assert!(!src.exists().await?);
-    assert!(dest.is_file().await?);
-    assert_eq!(dest.read().await?, b"move test");
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_rename_to_renames_dir() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let src = path!(&temp_dir) / "source-dir";
-    let nested = &src / "nested.txt";
-    let dest = path!(&temp_dir) / "dest-dir";
-
-    src.create_dir().await?;
-    nested.write(b"nested").await?;
-    let moved = src.rename_to(&dest).await?;
-
-    assert_eq!(moved, dest);
-    assert!(!src.exists().await?);
-    assert!(dest.is_dir().await?);
-    assert_eq!((&dest / "nested.txt").read().await?, b"nested");
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_open_returns_readable_file() -> Result<()> {
-    let temp_file = NamedTempFile::new()?;
-    let path = path!(&temp_file);
-    path.write(b"open test").await?;
-
-    let mut file = path.open().await?;
-    let mut content = String::new();
-    file.read_to_string(&mut content).await?;
-
-    assert_eq!(content, "open test");
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_open_with_options_uses_options() -> Result<()> {
-    let temp_dir = tempdir()?;
-    let path = path!(&temp_dir) / "created.txt";
-    let mut options = async_fs::OpenOptions::new();
-    options.write(true).create_new(true);
-
-    let mut file = path.open_with_options(&options).await?;
-    file.write_all(b"created").await?;
-    drop(file);
-
-    assert_eq!(path.read().await?, b"created");
+    // Dropping the runtime waits for the blocking task to finish.
+    drop(runtime);
+    assert_eq!(dest.read_sync()?, b"new");
+    assert_eq!(path!(&directory).read_dir_names_lossy_sync()?, ["dest"]);
     Ok(())
 }

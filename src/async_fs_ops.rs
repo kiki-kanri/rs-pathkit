@@ -1,140 +1,62 @@
-//! Async filesystem operations for owned paths.
-//!
-//! Available with the `async-fs-ops` feature. [`AsyncFsOps`] defines the operation and
-//! cancellation contracts and is implemented for [`Path`].
-
 use std::{
+    ffi::OsString,
     fs::{
+        FileType,
         Metadata,
         Permissions,
     },
-    io::Result as IoResult,
+    io,
     path::Path as StdPath,
+    task::{
+        Context,
+        Poll,
+    },
 };
 
+use derive_more::From;
 use serde::{
     Serialize,
     de::DeserializeOwned,
 };
-use serde_json::{
-    Error as JsonError,
-    Result as JsonResult,
-    from_slice,
-    to_vec_pretty,
-};
 use tokio::{
     fs::{
         self,
+        DirEntry,
         File,
         OpenOptions,
-        ReadDir,
     },
     task::spawn_blocking,
 };
 
 use crate::{
-    core::Path,
-    entry::r#async::AsyncPathEntry,
-    sync_fs_ops::SyncFsOps,
+    Path,
+    sync_fs_ops::{
+        SyncFsOps,
+        none_if_not_found,
+    },
 };
 
-/// Async filesystem operations for paths.
+/// Async counterparts of [`SyncFsOps`]; each method behaves like the `_sync` method of the same
+/// name.
 ///
-/// Available with the `async-fs-ops` feature. [`Path`] implements this trait using Tokio.
-/// For that implementation, methods borrow the stored path without changing it; their
-/// bodies run when their futures are polled, not merely when the methods are called.
-/// A Tokio runtime with blocking-task support is required for filesystem I/O. Paths are
-/// interpreted by the operating system, including relative paths resolved against the
-/// current working directory. The behavior described below applies to that implementation.
+/// Requires a Tokio runtime: polling outside one panics once the operation submits blocking work.
+/// Composite operations (`empty_dir`, `touch`, `write_atomic*`, `persist_to`), `chown`, and
+/// `prepare` callbacks run as a single task on Tokio's blocking pool; panics there surface as [`io::Error`]. Write methods copy `contents`
+/// before handing it to the blocking pool.
 ///
-/// With this trait in scope, its methods take precedence over same-named synchronous
-/// [`std::path::Path`] methods exposed through dereferencing, such as `canonicalize`,
-/// `read_link`, and `symlink_metadata`.
-///
-/// The [`Path`] implementation provides these shared behaviors:
-///
-/// - Metadata and type checks follow symlinks, except [`Self::is_symlink`] and
-///   [`Self::symlink_metadata`]. Type checks return an error for missing paths, rather
-///   than `false`. [`Self::exists`] returns `false` for a missing target, including a
-///   dangling symlink, and propagates other inspection errors.
-/// - [`Self::get_file_size`] returns metadata length in bytes, which is not necessarily
-///   allocated disk space or a meaningful content size for non-files.
-/// - [`Self::open`] opens an existing file read-only. [`Self::open_with_options`] uses
-///   the supplied options without changing them. Returned files follow [`tokio::fs::File`]
-///   behavior: writes can remain pending after an async write completes, and flushing
-///   waits for pending I/O but does not itself guarantee persistence to disk.
-/// - [`Self::write`] and [`Self::write_json`] create or truncate a file without creating
-///   parent directories. JSON uses pretty serialization. [`Self::read_json`] deserializes
-///   the complete file contents. JSON serialization and deserialization run synchronously
-///   within the polled future.
-/// - [`Self::write_atomic`] writes to a temporary file in the destination's directory, syncs
-///   it, and replaces the destination, so readers see either the old or the new contents.
-///   [`Self::write_atomic_with`] first runs `prepare` on the empty temporary file, for example
-///   to set permissions. The temporary file is created with mode `0600` on Unix or inherits
-///   the parent directory's ACL on Windows; the destination keeps its final permissions. On
-///   failure, the temporary file is removed when possible. File operations and `prepare` run
-///   on Tokio's blocking pool.
-/// - [`Self::persist_to`] syncs this file and replaces the exact destination the same way,
-///   without falling back to copying across filesystems. On Windows, replacement can fail
-///   while the destination is open or when a path exceeds `MAX_PATH`.
-/// - [`Self::truncate`] opens an existing file for writing and sets its length in bytes;
-///   `None` means `0`. Extending a file fills the added range with zero bytes.
-/// - [`Self::touch`] updates only the modification time of an existing target to the
-///   current time, or creates a missing file, on Tokio's blocking pool. It does not
-///   truncate existing content or create parent directories.
-/// - [`Self::create_parent_dir`] creates only the immediate parent and returns `true` on
-///   successful creation; an existing parent is an error. [`Self::create_parent_dir_all`]
-///   creates missing ancestors and returns `true` on success even if the parent already
-///   exists. Both return `false` when the lexical path has no parent.
-/// - [`Self::empty_dir`] creates a missing directory with its parents or removes the
-///   entries of an existing directory, keeping the directory itself. Removal is incremental
-///   and uses Tokio's file and recursive-directory removal rules. Child symlinks are
-///   removed without traversing their targets.
-/// - Directory collection methods return entries in filesystem iteration order, without
-///   sorting. [`Self::read_dir_names`] converts names to strings with invalid Unicode
-///   replaced; [`Self::read_dir_paths`] and [`Self::read_dir_entries`] retain native path
-///   data. [`Self::read_dir`] returns an iterator whose later async reads can fail.
-/// - [`Self::copy_file`] copies to the exact destination, overwriting an existing file
-///   and returning the number of bytes copied. [`Self::rename_to`] renames to the exact
-///   destination and returns a new [`Path`]; it does not update the source value or fall back
-///   to copying across filesystems. Replacement rules depend on the platform.
-/// - Link methods use `self` as the source or target and `link` as the new link path.
-///   [`Self::hard_link`] requires filesystem support. [`Self::read_link`] returns the
-///   stored target without resolving it. The Unix-only `soft_link` method stores the
-///   target as supplied.
-///
-/// Unix-only methods expose permission modes, owner and group IDs, and special-file
-/// checks. For ownership changes, `None` preserves the corresponding owner or group ID.
-/// Filesystem methods otherwise follow the corresponding [`tokio::fs`] operations.
-///
-/// # Errors
-///
-/// Propagates filesystem errors such as missing paths, permission errors, invalid file
-/// or directory types, and unsupported operations. Directory collection methods also
-/// propagate iteration errors instead of returning partial collections. UTF-8 string
-/// reads fail for invalid UTF-8; JSON methods return [`serde_json::Error`], with
-/// filesystem errors wrapped by [`serde_json::Error::io`]. Operations that run on Tokio's
-/// blocking pool also propagate blocking-task join errors. Changes made before an error are
-/// not rolled back.
-///
-/// # Panics
-///
-/// Operations that submit blocking work can panic if polled outside a Tokio runtime.
+/// With this trait in scope its methods take precedence over the synchronous
+/// [`std::path::Path`] methods of the same name reached through `Deref`, such as `try_exists`,
+/// `is_dir`, `metadata`, and `read_dir`; call `as_path()` to reach the std method.
 ///
 /// # Cancellation safety
 ///
-/// Dropping a future stops polling this operation but does not roll back completed
-/// filesystem changes. I/O already submitted to Tokio's blocking pool can continue.
-/// Multi-step operations, including directory creation, directory clearing, and file
-/// truncation, can leave partial changes. Collected directory entries are discarded
-/// when their collection future is dropped. Retrying a canceled operation is not an
-/// exactly-once guarantee.
-///
-/// # Examples
+/// Dropping a future does not roll back completed changes, and work already handed to the
+/// blocking pool can still run. A canceled write may therefore take effect even if the caller
+/// retries it.
 ///
 /// ```rust
 /// use pathkit::{
-///     AsyncFsOps,
+///     async_fs_ops::AsyncFsOps,
 ///     path,
 /// };
 ///
@@ -144,324 +66,255 @@ use crate::{
 ///     let file = path!(directory.path()) / "message.txt";
 ///     file.write(b"Hello!").await?;
 ///     assert_eq!(file.read_to_string().await?, "Hello!");
-///     assert_eq!(file.get_file_size().await?, 6);
 ///     Ok(())
 /// }
 /// ```
 #[async_trait::async_trait]
 pub trait AsyncFsOps {
-    /// Returns a new absolute path with symlinks resolved by the filesystem.
-    ///
-    /// Uses [`tokio::fs::canonicalize`], leaving the original value unchanged. Unlike
-    /// [`Path::absolutize`], this operation requires the path to exist. On Windows, the
-    /// result uses the standard library's extended-length path representation.
-    /// Use [`crate::SyncFsOps::canonicalize_sync`] for synchronous access.
-    ///
-    /// # Errors
-    ///
-    /// Propagates filesystem errors, including missing path components, permission errors,
-    /// and non-directory components before the end of the path.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use pathkit::{
-    ///     AsyncFsOps,
-    ///     path,
-    /// };
-    ///
-    /// #[tokio::main(flavor = "current_thread")]
-    /// async fn main() -> std::io::Result<()> {
-    ///     let directory = tempfile::tempdir()?;
-    ///     let canonical = path!(directory.path()).canonicalize().await?;
-    ///     assert!(canonical.is_absolute());
-    ///     Ok(())
-    /// }
-    /// ```
-    async fn canonicalize(&self) -> IoResult<Path>;
+    async fn canonicalize(&self) -> io::Result<Path>;
 
     #[cfg(unix)]
-    async fn chmod(&self, mode: u32) -> IoResult<()>;
+    async fn chmod(&self, mode: u32) -> io::Result<()>;
 
     #[cfg(unix)]
-    async fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> IoResult<()>;
+    async fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> io::Result<()>;
 
-    async fn copy_file(&self, dest: impl AsRef<StdPath> + Send) -> IoResult<u64>;
+    async fn copy_file(&self, dest: impl AsRef<StdPath> + Send) -> io::Result<u64>;
 
-    async fn create_dir_all(&self) -> IoResult<()>;
+    async fn create_dir_all(&self) -> io::Result<()>;
 
-    async fn create_dir(&self) -> IoResult<()>;
+    async fn create_dir(&self) -> io::Result<()>;
 
-    async fn create_parent_dir_all(&self) -> IoResult<bool>;
+    async fn create_parent_dir_all(&self) -> io::Result<()>;
 
-    async fn create_parent_dir(&self) -> IoResult<bool>;
+    async fn empty_dir(&self) -> io::Result<()>;
 
-    async fn empty_dir(&self) -> IoResult<()>;
+    async fn try_exists(&self) -> io::Result<bool>;
 
-    async fn exists(&self) -> IoResult<bool>;
-
-    async fn get_file_size(&self) -> IoResult<u64>;
-
-    async fn hard_link(&self, link: impl AsRef<StdPath> + Send) -> IoResult<()>;
+    async fn hard_link_to(&self, target: impl AsRef<StdPath> + Send) -> io::Result<()>;
 
     #[cfg(unix)]
-    async fn is_block_device(&self) -> IoResult<bool>;
+    async fn is_block_device(&self) -> io::Result<bool>;
 
     #[cfg(unix)]
-    async fn is_char_device(&self) -> IoResult<bool>;
+    async fn is_char_device(&self) -> io::Result<bool>;
 
-    async fn is_dir(&self) -> IoResult<bool>;
-
-    #[cfg(unix)]
-    async fn is_fifo(&self) -> IoResult<bool>;
-
-    async fn is_file(&self) -> IoResult<bool>;
+    async fn is_dir(&self) -> io::Result<bool>;
 
     #[cfg(unix)]
-    async fn is_socket(&self) -> IoResult<bool>;
+    async fn is_fifo(&self) -> io::Result<bool>;
 
-    async fn is_symlink(&self) -> IoResult<bool>;
+    async fn is_file(&self) -> io::Result<bool>;
 
-    async fn metadata(&self) -> IoResult<Metadata>;
-
-    async fn open(&self) -> IoResult<File>;
-
-    async fn open_with_options(&self, options: &OpenOptions) -> IoResult<File>;
-
-    async fn persist_to(&self, dest: impl AsRef<StdPath> + Send) -> IoResult<Path>;
-
-    async fn read_dir(&self) -> IoResult<ReadDir>;
-
-    async fn read_dir_entries(&self) -> IoResult<Vec<AsyncPathEntry>>;
-
-    async fn read_dir_names(&self) -> IoResult<Vec<String>>;
-
-    async fn read_dir_paths(&self) -> IoResult<Vec<Path>>;
-
-    async fn read_json<T: DeserializeOwned>(&self) -> JsonResult<T>;
-
-    async fn read_link(&self) -> IoResult<Path>;
-
-    async fn read(&self) -> IoResult<Vec<u8>>;
-
-    async fn read_to_string(&self) -> IoResult<String>;
-
-    async fn remove_dir_all(&self) -> IoResult<()>;
-
-    async fn remove_dir(&self) -> IoResult<()>;
-
-    async fn remove_file(&self) -> IoResult<()>;
-
-    async fn rename_to(&self, dest: impl AsRef<StdPath> + Send) -> IoResult<Path>;
-
-    async fn set_permissions(&self, permissions: Permissions) -> IoResult<()>;
-
-    // TODO: Add Windows `symlink_file` and `symlink_dir` variants; Windows requires the link type
-    // to be chosen explicitly instead of inferred from the target.
     #[cfg(unix)]
-    async fn soft_link(&self, link: impl AsRef<StdPath> + Send) -> IoResult<()>;
+    async fn is_socket(&self) -> io::Result<bool>;
 
-    /// Returns metadata for the path itself without following a final symlink.
-    ///
-    /// Dangling symlinks can be inspected; missing paths return an error.
-    /// Use [`crate::SyncFsOps::symlink_metadata_sync`] for synchronous access.
-    async fn symlink_metadata(&self) -> IoResult<Metadata>;
+    async fn is_symlink(&self) -> io::Result<bool>;
 
-    async fn touch(&self) -> IoResult<()>;
+    async fn metadata_if_exists(&self) -> io::Result<Option<Metadata>>;
 
-    async fn truncate(&self, len: Option<u64>) -> IoResult<()>;
+    async fn metadata(&self) -> io::Result<Metadata>;
 
-    async fn write_atomic(&self, contents: impl AsRef<[u8]> + Send) -> IoResult<()>;
+    async fn open(&self) -> io::Result<File>;
+
+    async fn open_with_options(&self, options: &OpenOptions) -> io::Result<File>;
+
+    async fn persist_to(&self, dest: impl AsRef<StdPath> + Send) -> io::Result<Path>;
+
+    async fn read_dir(&self) -> io::Result<AsyncReadDir>;
+
+    async fn read_dir_entries(&self) -> io::Result<Vec<AsyncPathEntry>>;
+
+    async fn read_dir_names_lossy(&self) -> io::Result<Vec<String>>;
+
+    async fn read_dir_paths(&self) -> io::Result<Vec<Path>>;
+
+    async fn read_if_exists(&self) -> io::Result<Option<Vec<u8>>>;
+
+    /// Deserialization runs on the polling thread.
+    async fn read_json<T: DeserializeOwned>(&self) -> serde_json::Result<T>;
+
+    async fn read_link(&self) -> io::Result<Path>;
+
+    async fn read(&self) -> io::Result<Vec<u8>>;
+
+    async fn read_to_string_if_exists(&self) -> io::Result<Option<String>>;
+
+    async fn read_to_string(&self) -> io::Result<String>;
+
+    async fn remove_dir_all(&self) -> io::Result<()>;
+
+    async fn remove_dir(&self) -> io::Result<()>;
+
+    async fn remove_file_if_exists(&self) -> io::Result<bool>;
+
+    async fn remove_file(&self) -> io::Result<()>;
+
+    async fn rename_to(&self, dest: impl AsRef<StdPath> + Send) -> io::Result<Path>;
+
+    async fn set_permissions(&self, permissions: Permissions) -> io::Result<()>;
+
+    #[cfg(unix)]
+    async fn symlink_to(&self, target: impl AsRef<StdPath> + Send) -> io::Result<()>;
+
+    async fn symlink_metadata_if_exists(&self) -> io::Result<Option<Metadata>>;
+
+    async fn symlink_metadata(&self) -> io::Result<Metadata>;
+
+    async fn touch(&self) -> io::Result<()>;
+
+    async fn write_atomic(&self, contents: impl AsRef<[u8]> + Send) -> io::Result<()>;
 
     async fn write_atomic_with(
         &self,
         contents: impl AsRef<[u8]> + Send,
-        prepare: impl for<'a> FnOnce(&'a Path) -> IoResult<()> + Send + 'static,
-    ) -> IoResult<()>;
+        prepare: impl for<'a> FnOnce(&'a Path) -> io::Result<()> + Send + 'static,
+    ) -> io::Result<()>;
 
-    async fn write_json<T: Serialize + Send>(&self, data: T) -> JsonResult<()>;
+    /// Serialization runs on the polling thread.
+    async fn write_json<T: Serialize + Sync + ?Sized>(&self, data: &T) -> serde_json::Result<()>;
 
-    async fn write(&self, contents: impl AsRef<[u8]> + Send) -> IoResult<()>;
+    async fn write(&self, contents: impl AsRef<[u8]> + Send) -> io::Result<()>;
 }
 
 #[async_trait::async_trait]
 impl AsyncFsOps for Path {
-    async fn canonicalize(&self) -> IoResult<Path> {
+    async fn canonicalize(&self) -> io::Result<Path> {
         fs::canonicalize(self).await.map(Self::from)
     }
 
     #[cfg(unix)]
-    async fn chmod(&self, mode: u32) -> IoResult<()> {
+    async fn chmod(&self, mode: u32) -> io::Result<()> {
         use std::os::unix::fs::PermissionsExt;
 
         fs::set_permissions(self, Permissions::from_mode(mode)).await
     }
 
     #[cfg(unix)]
-    async fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> IoResult<()> {
-        use std::os::unix::fs::chown;
-
+    async fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> io::Result<()> {
         let path = self.clone();
-        spawn_blocking(move || chown(path, uid, gid)).await?
+        spawn_blocking(move || path.chown_sync(uid, gid)).await?
     }
 
-    async fn copy_file(&self, dest: impl AsRef<StdPath> + Send) -> IoResult<u64> {
+    async fn copy_file(&self, dest: impl AsRef<StdPath> + Send) -> io::Result<u64> {
         fs::copy(self, dest).await
     }
 
-    async fn create_dir(&self) -> IoResult<()> {
-        fs::create_dir(self).await
-    }
-
-    async fn create_dir_all(&self) -> IoResult<()> {
+    async fn create_dir_all(&self) -> io::Result<()> {
         fs::create_dir_all(self).await
     }
 
-    async fn create_parent_dir_all(&self) -> IoResult<bool> {
-        if let Some(parent) = self.parent() {
-            parent.create_dir_all().await?;
-            return Ok(true);
-        }
-
-        Ok(false)
+    async fn create_dir(&self) -> io::Result<()> {
+        fs::create_dir(self).await
     }
 
-    async fn create_parent_dir(&self) -> IoResult<bool> {
-        if let Some(parent) = self.parent() {
-            parent.create_dir().await?;
-            return Ok(true);
+    async fn create_parent_dir_all(&self) -> io::Result<()> {
+        match self.parent() {
+            Some(parent) => parent.create_dir_all().await,
+            None => Ok(()),
         }
-
-        Ok(false)
     }
 
-    async fn empty_dir(&self) -> IoResult<()> {
-        #[cfg(windows)]
-        use std::os::windows::fs::FileTypeExt;
-
-        if !self.exists().await? {
-            return self.create_dir_all().await;
-        }
-
-        let mut entries = fs::read_dir(self).await?;
-        while let Some(entry) = entries.next_entry().await? {
-            let entry_path = entry.path();
-            let file_type = entry.file_type().await?;
-            if file_type.is_dir() {
-                fs::remove_dir_all(entry_path).await?;
-            } else {
-                #[cfg(windows)]
-                if file_type.is_symlink_dir() {
-                    fs::remove_dir(entry_path).await?;
-                    continue;
-                }
-
-                fs::remove_file(entry_path).await?;
-            }
-        }
-
-        Ok(())
+    async fn empty_dir(&self) -> io::Result<()> {
+        let path = self.clone();
+        spawn_blocking(move || path.empty_dir_sync()).await?
     }
 
-    async fn exists(&self) -> IoResult<bool> {
+    async fn try_exists(&self) -> io::Result<bool> {
         fs::try_exists(self).await
     }
 
-    async fn get_file_size(&self) -> IoResult<u64> {
-        Ok(self.metadata().await?.len())
-    }
-
-    async fn hard_link(&self, link: impl AsRef<StdPath> + Send) -> IoResult<()> {
-        fs::hard_link(self, link).await
+    async fn hard_link_to(&self, target: impl AsRef<StdPath> + Send) -> io::Result<()> {
+        fs::hard_link(target, self).await
     }
 
     #[cfg(unix)]
-    async fn is_block_device(&self) -> IoResult<bool> {
+    async fn is_block_device(&self) -> io::Result<bool> {
         use std::os::unix::fs::FileTypeExt;
 
         Ok(self.metadata().await?.file_type().is_block_device())
     }
 
     #[cfg(unix)]
-    async fn is_char_device(&self) -> IoResult<bool> {
+    async fn is_char_device(&self) -> io::Result<bool> {
         use std::os::unix::fs::FileTypeExt;
 
         Ok(self.metadata().await?.file_type().is_char_device())
     }
 
-    async fn is_dir(&self) -> IoResult<bool> {
+    async fn is_dir(&self) -> io::Result<bool> {
         Ok(self.metadata().await?.is_dir())
     }
 
     #[cfg(unix)]
-    async fn is_fifo(&self) -> IoResult<bool> {
+    async fn is_fifo(&self) -> io::Result<bool> {
         use std::os::unix::fs::FileTypeExt;
 
         Ok(self.metadata().await?.file_type().is_fifo())
     }
 
-    async fn is_file(&self) -> IoResult<bool> {
+    async fn is_file(&self) -> io::Result<bool> {
         Ok(self.metadata().await?.is_file())
     }
 
     #[cfg(unix)]
-    async fn is_socket(&self) -> IoResult<bool> {
+    async fn is_socket(&self) -> io::Result<bool> {
         use std::os::unix::fs::FileTypeExt;
 
         Ok(self.metadata().await?.file_type().is_socket())
     }
 
-    async fn is_symlink(&self) -> IoResult<bool> {
+    async fn is_symlink(&self) -> io::Result<bool> {
         Ok(self.symlink_metadata().await?.file_type().is_symlink())
     }
 
-    async fn metadata(&self) -> IoResult<Metadata> {
+    async fn metadata_if_exists(&self) -> io::Result<Option<Metadata>> {
+        none_if_not_found(self.metadata().await)
+    }
+
+    async fn metadata(&self) -> io::Result<Metadata> {
         fs::metadata(self).await
     }
 
-    async fn open(&self) -> IoResult<File> {
+    async fn open(&self) -> io::Result<File> {
         File::open(self).await
     }
 
-    async fn open_with_options(&self, options: &OpenOptions) -> IoResult<File> {
+    async fn open_with_options(&self, options: &OpenOptions) -> io::Result<File> {
         options.open(self).await
     }
 
-    async fn persist_to(&self, dest: impl AsRef<StdPath> + Send) -> IoResult<Path> {
+    async fn persist_to(&self, dest: impl AsRef<StdPath> + Send) -> io::Result<Path> {
         let source = self.clone();
         let dest = Self::new(dest);
         spawn_blocking(move || source.persist_to_sync(dest)).await?
     }
 
-    async fn read(&self) -> IoResult<Vec<u8>> {
-        fs::read(self).await
+    async fn read_dir(&self) -> io::Result<AsyncReadDir> {
+        fs::read_dir(self).await.map(AsyncReadDir)
     }
 
-    async fn read_dir(&self) -> IoResult<ReadDir> {
-        fs::read_dir(self).await
-    }
-
-    async fn read_dir_entries(&self) -> IoResult<Vec<AsyncPathEntry>> {
+    async fn read_dir_entries(&self) -> io::Result<Vec<AsyncPathEntry>> {
         let mut entries = Vec::new();
         let mut read_dir = fs::read_dir(self).await?;
         while let Some(entry) = read_dir.next_entry().await? {
-            entries.push(AsyncPathEntry::new(entry));
+            entries.push(AsyncPathEntry(entry));
         }
 
         Ok(entries)
     }
 
-    async fn read_dir_names(&self) -> IoResult<Vec<String>> {
+    async fn read_dir_names_lossy(&self) -> io::Result<Vec<String>> {
         let mut names = Vec::new();
         let mut read_dir = fs::read_dir(self).await?;
         while let Some(entry) = read_dir.next_entry().await? {
-            names.push(entry.file_name().to_string_lossy().into());
+            names.push(entry.file_name().to_string_lossy().into_owned());
         }
 
         Ok(names)
     }
 
-    async fn read_dir_paths(&self) -> IoResult<Vec<Path>> {
+    async fn read_dir_paths(&self) -> io::Result<Vec<Path>> {
         let mut paths = Vec::new();
         let mut read_dir = fs::read_dir(self).await?;
         while let Some(entry) = read_dir.next_entry().await? {
@@ -471,81 +324,145 @@ impl AsyncFsOps for Path {
         Ok(paths)
     }
 
-    async fn read_json<T: DeserializeOwned>(&self) -> JsonResult<T> {
-        from_slice(&self.read().await.map_err(JsonError::io)?)
+    async fn read_if_exists(&self) -> io::Result<Option<Vec<u8>>> {
+        none_if_not_found(self.read().await)
     }
 
-    async fn read_link(&self) -> IoResult<Path> {
+    async fn read_json<T: DeserializeOwned>(&self) -> serde_json::Result<T> {
+        serde_json::from_slice(&self.read().await.map_err(serde_json::Error::io)?)
+    }
+
+    async fn read_link(&self) -> io::Result<Path> {
         fs::read_link(self).await.map(Self::from)
     }
 
-    async fn read_to_string(&self) -> IoResult<String> {
+    async fn read(&self) -> io::Result<Vec<u8>> {
+        fs::read(self).await
+    }
+
+    async fn read_to_string_if_exists(&self) -> io::Result<Option<String>> {
+        none_if_not_found(self.read_to_string().await)
+    }
+
+    async fn read_to_string(&self) -> io::Result<String> {
         fs::read_to_string(self).await
     }
 
-    async fn remove_dir(&self) -> IoResult<()> {
-        fs::remove_dir(self).await
-    }
-
-    async fn remove_file(&self) -> IoResult<()> {
-        fs::remove_file(self).await
-    }
-
-    async fn remove_dir_all(&self) -> IoResult<()> {
+    async fn remove_dir_all(&self) -> io::Result<()> {
         fs::remove_dir_all(self).await
     }
 
-    async fn rename_to(&self, dest: impl AsRef<StdPath> + Send) -> IoResult<Path> {
+    async fn remove_dir(&self) -> io::Result<()> {
+        fs::remove_dir(self).await
+    }
+
+    async fn remove_file_if_exists(&self) -> io::Result<bool> {
+        Ok(none_if_not_found(self.remove_file().await)?.is_some())
+    }
+
+    async fn remove_file(&self) -> io::Result<()> {
+        fs::remove_file(self).await
+    }
+
+    async fn rename_to(&self, dest: impl AsRef<StdPath> + Send) -> io::Result<Path> {
         fs::rename(self, dest.as_ref()).await?;
         Ok(Self::new(dest))
     }
 
-    async fn set_permissions(&self, permissions: Permissions) -> IoResult<()> {
+    async fn set_permissions(&self, permissions: Permissions) -> io::Result<()> {
         fs::set_permissions(self, permissions).await
     }
 
     #[cfg(unix)]
-    async fn soft_link(&self, link: impl AsRef<StdPath> + Send) -> IoResult<()> {
-        fs::symlink(self, link).await
+    async fn symlink_to(&self, target: impl AsRef<StdPath> + Send) -> io::Result<()> {
+        fs::symlink(target, self).await
     }
 
-    async fn symlink_metadata(&self) -> IoResult<Metadata> {
+    async fn symlink_metadata_if_exists(&self) -> io::Result<Option<Metadata>> {
+        none_if_not_found(self.symlink_metadata().await)
+    }
+
+    async fn symlink_metadata(&self) -> io::Result<Metadata> {
         fs::symlink_metadata(self).await
     }
 
-    async fn touch(&self) -> IoResult<()> {
+    async fn touch(&self) -> io::Result<()> {
         let path = self.clone();
         spawn_blocking(move || path.touch_sync()).await?
     }
 
-    async fn truncate(&self, len: Option<u64>) -> IoResult<()> {
-        OpenOptions::new()
-            .write(true)
-            .open(self)
-            .await?
-            .set_len(len.unwrap_or(0))
-            .await
-    }
-
-    async fn write_atomic(&self, contents: impl AsRef<[u8]> + Send) -> IoResult<()> {
+    async fn write_atomic(&self, contents: impl AsRef<[u8]> + Send) -> io::Result<()> {
         self.write_atomic_with(contents, |_| Ok(())).await
     }
 
     async fn write_atomic_with(
         &self,
         contents: impl AsRef<[u8]> + Send,
-        prepare: impl for<'a> FnOnce(&'a Path) -> IoResult<()> + Send + 'static,
-    ) -> IoResult<()> {
+        prepare: impl for<'a> FnOnce(&'a Path) -> io::Result<()> + Send + 'static,
+    ) -> io::Result<()> {
         let path = self.clone();
         let contents = contents.as_ref().to_vec();
         spawn_blocking(move || path.write_atomic_with_sync(contents, prepare)).await?
     }
 
-    async fn write_json<T: Serialize + Send>(&self, data: T) -> JsonResult<()> {
-        self.write(to_vec_pretty(&data)?).await.map_err(JsonError::io)
+    async fn write_json<T: Serialize + Sync + ?Sized>(&self, data: &T) -> serde_json::Result<()> {
+        self.write(serde_json::to_vec_pretty(data)?)
+            .await
+            .map_err(serde_json::Error::io)
     }
 
-    async fn write(&self, contents: impl AsRef<[u8]> + Send) -> IoResult<()> {
+    async fn write(&self, contents: impl AsRef<[u8]> + Send) -> io::Result<()> {
         fs::write(self, contents).await
+    }
+}
+
+/// Metadata and file-type queries do not follow symlinks and may run on Tokio's blocking pool. On
+/// Unix, a retained entry can keep its directory's file descriptor open after the stream is
+/// dropped.
+#[derive(Debug, From)]
+pub struct AsyncPathEntry(DirEntry);
+
+impl AsyncPathEntry {
+    #[inline]
+    pub fn path(&self) -> Path {
+        Path::from(self.0.path())
+    }
+
+    #[inline]
+    pub fn file_name(&self) -> OsString {
+        self.0.file_name()
+    }
+
+    pub async fn metadata(&self) -> io::Result<Metadata> {
+        self.0.metadata().await
+    }
+
+    pub async fn file_type(&self) -> io::Result<FileType> {
+        self.0.file_type().await
+    }
+
+    #[inline]
+    pub fn as_dir_entry(&self) -> &DirEntry {
+        &self.0
+    }
+
+    #[inline]
+    pub fn into_dir_entry(self) -> DirEntry {
+        self.0
+    }
+}
+
+#[derive(Debug)]
+pub struct AsyncReadDir(fs::ReadDir);
+
+impl AsyncReadDir {
+    /// Cancel safe, like [`tokio::fs::ReadDir::next_entry`].
+    pub async fn next_entry(&mut self) -> io::Result<Option<AsyncPathEntry>> {
+        Ok(self.0.next_entry().await?.map(AsyncPathEntry))
+    }
+
+    /// Polling counterpart of [`Self::next_entry`], for building a `Stream`.
+    pub fn poll_next_entry(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<Option<AsyncPathEntry>>> {
+        self.0.poll_next_entry(cx).map_ok(|entry| entry.map(AsyncPathEntry))
     }
 }
