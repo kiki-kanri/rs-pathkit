@@ -2,6 +2,7 @@
 name = "pathkit"
 version = "3.1.0"
 edition = "2024"
+rust-version = "1.95"
 
 description = "Similar to the Path structure provided by python's pathlib, it provides various async/sync versions of file manipulation methods in addition to some of the std::Path built-in methods."
 # documentation = "https://docs.rs/crate-name"
@@ -40,6 +41,9 @@ include = [
 # Optional cargo/tool metadata.
 # [package.metadata]
 
+
+[package.metadata.docs.rs]
+all-features = true
 
 # =============================================================================
 # Lints
@@ -141,13 +145,11 @@ missing_crate_level_docs = "allow"
 [features]
 default = []
 
-# Convenience aliases.
-all = [
+# Enables every feature.
+full = [
   "async-fs-ops",
   "sea-orm",
 ]
-
-full = ["all"]
 
 # Example:
 # serde = ["dep:serde"]
