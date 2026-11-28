@@ -32,8 +32,8 @@ use crate::{
 /// Blocking filesystem operations for paths.
 ///
 /// Methods without their own docs wrap the std function they are named after (`copy_file` wraps
-/// `fs::copy`, `open*` wrap `File::open` / `OpenOptions::open`) and return [`Path`] where std
-/// returns `PathBuf`. Rules shared by all methods:
+/// [`fs::copy`], `open*` wrap [`File::open`] / [`OpenOptions::open`]) and return [`Path`] where std
+/// returns [`PathBuf`](std::path::PathBuf). Rules shared by all methods:
 ///
 /// - Metadata and type checks follow symlinks, except `is_symlink_sync` and
 ///   `symlink_metadata*`. Type checks return `Err` for a missing path, not `false`.
@@ -121,11 +121,15 @@ pub trait SyncFsOps {
 
     fn open_with_options_sync(&self, options: &OpenOptions) -> io::Result<File>;
 
-    /// Syncs this regular file, renames it over `dest`, and on Unix syncs `dest`'s directory. Fails
-    /// with [`io::ErrorKind::InvalidInput`] for a symlink or other non-regular source; a `dest` on
-    /// another filesystem fails instead of being copied. The file keeps its own permissions. On
-    /// Windows the source must be writable, and transient replace failures are retried as in
+    /// Syncs this regular file, renames it over `dest`, and on Unix syncs `dest`'s directory. The
+    /// file keeps its own permissions. On Windows, transient replace failures are retried as in
     /// [`Self::write_atomic_with_sync`].
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`io::ErrorKind::InvalidInput`] for a symlink or other non-regular source. A
+    /// `dest` on another filesystem fails instead of being copied. On Windows the source must be
+    /// writable.
     fn persist_to_sync(&self, dest: impl AsRef<StdPath>) -> io::Result<Path>;
 
     fn read_dir_entries_sync(&self) -> io::Result<Vec<PathEntry>>;
@@ -185,10 +189,11 @@ pub trait SyncFsOps {
     /// write the file.
     ///
     /// On Unix the result keeps the permission bits of an existing regular file at `self` (otherwise
-    /// `0600`), but not its owner; on Windows it inherits the directory ACL. `prepare` runs afterwards and can override
-    /// either. A symlink at `self` is replaced by a regular file rather than followed. On failure,
-    /// removing the temporary file is attempted but not guaranteed. On Windows, a replace that fails
-    /// because another process briefly holds a file open is retried for about one second.
+    /// `0600`), but not its owner; on Windows it inherits the directory ACL. `prepare` runs
+    /// afterwards and can override either. A symlink at `self` is replaced by a regular file rather
+    /// than followed. On failure, removing the temporary file is attempted but not guaranteed. On
+    /// Windows, a replace that fails because another process briefly holds a file open is retried
+    /// for about one second.
     ///
     /// # Errors
     ///

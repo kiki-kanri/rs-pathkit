@@ -57,6 +57,11 @@ impl Path {
 
     /// Wraps [`std::path::absolute`], so `..` stays on Unix; use [`Self::absolutize`] to resolve it
     /// lexically.
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`io::ErrorKind::InvalidInput`] for an empty path, and when the current working
+    /// directory cannot be read for a relative path.
     pub fn absolute(&self) -> io::Result<Self> {
         std::path::absolute(&self.0).map(Self)
     }

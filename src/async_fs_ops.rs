@@ -39,14 +39,17 @@ use crate::{
 /// Async counterparts of [`SyncFsOps`]; each method behaves like the `_sync` method of the same
 /// name.
 ///
-/// Requires a Tokio runtime: polling outside one panics once the operation submits blocking work.
 /// Composite operations (`empty_dir`, `touch`, `write_atomic*`, `persist_to`), `chown`, and
-/// `prepare` callbacks run as a single task on Tokio's blocking pool; panics there surface as [`io::Error`]. Write methods copy `contents`
-/// before handing it to the blocking pool.
+/// `prepare` callbacks run as a single task on Tokio's blocking pool; panics there surface as
+/// [`io::Error`]. Write methods copy `contents` before handing it to the blocking pool.
 ///
 /// With this trait in scope its methods take precedence over the synchronous
 /// [`std::path::Path`] methods of the same name reached through `Deref`, such as `try_exists`,
 /// `is_dir`, `metadata`, and `read_dir`; call `as_path()` to reach the std method.
+///
+/// # Panics
+///
+/// Polling outside a Tokio runtime panics once the operation submits blocking work.
 ///
 /// # Cancellation safety
 ///
